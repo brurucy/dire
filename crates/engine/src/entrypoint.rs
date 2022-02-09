@@ -1,148 +1,80 @@
-use differential_dataflow::input::InputSession;
-use timely::communication::allocator::Thread;
+use crate::types::{Triple, TripleSink, UnaryMaterialization, WorkerExecutionClosure};
+use differential_dataflow::input::Input;
+use differential_dataflow::lattice::Lattice;
+use differential_dataflow::operators::arrange::ArrangeBySelf;
+use flume::Sender;
+use timely::communication::allocator::Generic;
+use timely::communication::Allocator;
+use timely::dataflow::scopes::Child;
+use timely::dataflow::Scope;
 use timely::worker::Worker;
 
-const TBOX: [(usize, usize, usize); 25] = [
-    (7, 4, 8),
-    (7, 9, 10),
-    (11, 4, 8),
-    (11, 9, 12),
-    (11, 0, 7),
-    (13, 4, 8),
-    (13, 9, 14),
-    (13, 0, 15),
-    (15, 4, 8),
-    (15, 9, 16),
-    (15, 0, 11),
-    (17, 4, 18),
-    (17, 9, 19),
-    (17, 1, 20),
-    (21, 4, 18),
-    (21, 9, 22),
-    (20, 4, 18),
-    (20, 9, 23),
-    (20, 1, 21),
-    (20, 4, 5),
-    (24, 6, 20),
-    (25, 4, 18),
-    (25, 9, 26),
-    (25, 2, 11),
-    (25, 3, 27),
-];
-
-const ABOX: [(usize, usize, usize); 6] = [
-    (28, 17, 29),
-    (28, 4, 13),
-    (28, 25, 30),
-    (28, 20, 31),
-    (31, 20, 32),
-    (32, 20, 33),
-];
-
-type TimelyScopeClosure = fn(worker: &mut Worker<Thread>) -> ();
-
-fn boilerplate(tsc: TimelyScopeClosure) {
-    timely::execute_directly(move |worker| tsc(worker))
-}
-
-fn inject_encoded_lubm_tbox(mut tbox_input: InputSession<(), (usize, usize, usize), isize>) {
-    for tuple in ABOX {
-        tbox_input.insert(tuple)
-    }
-}
-
-fn inject_encoded_lubm_abox(mut abox_input: InputSession<(), (usize, usize, usize), isize>) {
-    for tuple in ABOX {
-        abox_input.insert(tuple)
-    }
+pub fn reason(
+    cfg: timely::Config,
+    tbox_materialization: &'static UnaryMaterialization,
+    tbox_sink: TripleSink,
+) -> () {
+    timely::execute(cfg, move |worker: &mut Worker<Generic>| {
+        let (mut tbox_input_session, tbox_trace) =
+            worker.dataflow_named::<usize, _, _>("tbox_materialization", |outer| {
+                let (tbox_input_session, tbox_collection) =
+                    outer.new_collection::<(usize, usize, usize), isize>();
+                let materialization = tbox_materialization(&tbox_collection);
+                materialization.inspect(|triple| {
+                    tbox_sink.send(*triple).unwrap();
+                });
+                (tbox_input_session, materialization.arrange_by_self().trace)
+            });
+        if worker.index() == 0 {
+            tbox_input_session.insert((28, 17, 29));
+            tbox_input_session.insert((28, 4, 13));
+        };
+        worker.step();
+    });
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::entrypoint::{
-        boilerplate, inject_encoded_lubm_abox, inject_encoded_lubm_tbox, TimelyScopeClosure, ABOX,
-    };
-    use std::collections::BTreeSet;
-    use std::ptr::null;
-
+    use crate::entrypoint::reason;
+    use crate::types::{TripleCollection, UnaryMaterialization, WorkerExecutionClosure};
     use differential_dataflow::input::Input;
-    use differential_dataflow::operators::arrange::agent::TraceAgent;
-    use differential_dataflow::operators::arrange::arrangement::{ArrangeByKey, ArrangeBySelf};
-    use differential_dataflow::operators::join::JoinCore;
-    use differential_dataflow::trace::cursor::CursorDebug;
-    use differential_dataflow::trace::TraceReader;
-
-    use timely::communication::allocator::Thread;
-    use timely::dataflow::operators::probe::Handle;
-    use timely::dataflow::operators::{Inspect, Map, ToStream, ToStreamAsync};
-    use timely::dataflow::scopes::Child;
+    use differential_dataflow::operators::arrange::{ArrangeByKey, ArrangeBySelf};
+    use differential_dataflow::operators::{JoinCore, Threshold};
+    use std::borrow::Borrow;
+    use timely::communication::{Allocator, Config};
     use timely::worker::Worker;
 
+    fn redundant<'a>(tbox: &TripleCollection<'a>) -> TripleCollection<'a> {
+        let tcl = tbox.clone();
+        return tcl;
+    }
+
+    const REDUNDANT_WRAPPER: &'static UnaryMaterialization = &redundant;
+
     #[test]
-    fn it_works() {
-        let computation: TimelyScopeClosure = |worker| {
-            let mut probe = Handle::new();
+    fn reason_works() {
+        // These computations are meaningless.
+        // The point of this test is to assert that the closure is indeed executed
+        // And for that, we do some random computations and then just send the output to a channel
+        // We can be sure that the closure was executed if the channel receiver has the expected computation result.
+        let (ttx, trx) = flume::unbounded();
+        reason(
+            timely::Config {
+                communication: Config::Process(2),
+                worker: Default::default(),
+            },
+            REDUNDANT_WRAPPER,
+            ttx,
+        );
 
-            let (mut source_one, mut source_two, mut trace_one, mut trace_two) = worker
-                .dataflow_named::<(), _, _>(
-                    "materialization",
-                    |outer: &mut Child<Worker<Thread>, ()>| {
-                        let (source_one, data_one) =
-                            outer.new_collection::<(usize, usize, usize), isize>();
-                        let (source_two, data_two) =
-                            outer.new_collection::<(usize, usize, usize), isize>();
+        let mut diffs: Vec<((usize, usize, usize), usize, isize)> = vec![];
 
-                        let trace_one = data_one.probe_with(&mut probe).arrange_by_self().trace;
-                        let trace_two = data_two.arrange_by_self().trace;
+        while let Ok(diff) = trx.try_recv() {
+            diffs.push(diff)
+        }
 
-                        (source_one, source_two, trace_one, trace_two)
-                    },
-                );
+        let expected_diffs = vec![((28, 17, 29), 0, 1), ((28, 4, 13), 0, 1)];
 
-            let (mut source_query, mut data_query) = worker.dataflow_named::<(), _, _>(
-                "query_one",
-                |outer: &mut Child<Worker<Thread>, ()>| {
-                    let (source_query, data_query) =
-                        outer.new_collection::<(usize, usize), isize>();
-
-                    let data_one = trace_one
-                        .import(outer)
-                        .as_collection(|(x, y, z), v| (*y, (*x, *z)))
-                        .inspect(|x| println!("What happens? {:?}", x))
-                        .arrange_by_key();
-
-                    let data_query = data_query
-                        .join_core(&data_one, |_key, k, v| Some(*(v)))
-                        .probe_with(&mut probe)
-                        .inspect(|x| println!("What happened {:?}", x))
-                        .arrange_by_key();
-
-                    (source_query, data_query.trace)
-                },
-            );
-
-            source_one.insert(ABOX[0]);
-            source_one.insert(ABOX[1]);
-            source_one.insert(ABOX[2]);
-            source_one.insert(ABOX[3]);
-
-            let freezing_one = data_query.cursor().0;
-
-            source_query.insert((20, 0));
-
-            while probe.less_than(source_one.time()) {
-                worker.step();
-            }
-
-            let freezing_two = data_query.cursor().0;
-
-            source_one.insert(ABOX[4]);
-
-            let freezing_three = data_query.cursor().0;
-
-            worker.step();
-        };
-
-        boilerplate(computation)
+        assert_eq!(expected_diffs, diffs)
     }
 }
