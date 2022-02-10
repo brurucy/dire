@@ -1,4 +1,7 @@
-use crate::types::{Triple, TripleSink, UnaryMaterialization, WorkerExecutionClosure};
+use crate::types::{
+    DataflowExecutionClosure, Triple, TripleCollection, TripleInputSession, TripleSink,
+    TripleTrace, UnaryMaterialization, WorkerExecutionClosure,
+};
 use differential_dataflow::input::Input;
 use differential_dataflow::lattice::Lattice;
 use differential_dataflow::operators::arrange::ArrangeBySelf;
@@ -8,21 +11,21 @@ use timely::communication::Allocator;
 use timely::dataflow::scopes::Child;
 use timely::dataflow::Scope;
 use timely::worker::Worker;
+use timely::Config;
 
 pub fn reason(
     cfg: timely::Config,
-    tbox_materialization: &'static UnaryMaterialization,
+    tbox_materialization: UnaryMaterialization,
     tbox_sink: TripleSink,
 ) -> () {
     timely::execute(cfg, move |worker: &mut Worker<Generic>| {
         let (mut tbox_input_session, tbox_trace) =
-            worker.dataflow_named::<usize, _, _>("tbox_materialization", |outer| {
+            worker.dataflow_named::<usize, _, _>("tbox_materialization", |scope| {
+                let tbox_sink = tbox_sink.clone();
                 let (tbox_input_session, tbox_collection) =
-                    outer.new_collection::<(usize, usize, usize), isize>();
+                    scope.new_collection::<(usize, usize, usize), isize>();
                 let materialization = tbox_materialization(&tbox_collection);
-                materialization.inspect(|triple| {
-                    tbox_sink.send(*triple).unwrap();
-                });
+                materialization.inspect(move |x| tbox_sink.send(*x).unwrap());
                 (tbox_input_session, materialization.arrange_by_self().trace)
             });
         if worker.index() == 0 {
@@ -44,13 +47,6 @@ mod tests {
     use timely::communication::{Allocator, Config};
     use timely::worker::Worker;
 
-    fn redundant<'a>(tbox: &TripleCollection<'a>) -> TripleCollection<'a> {
-        let tcl = tbox.clone();
-        return tcl;
-    }
-
-    const REDUNDANT_WRAPPER: &'static UnaryMaterialization = &redundant;
-
     #[test]
     fn reason_works() {
         // These computations are meaningless.
@@ -63,7 +59,7 @@ mod tests {
                 communication: Config::Process(2),
                 worker: Default::default(),
             },
-            REDUNDANT_WRAPPER,
+            |tbox: &TripleCollection| return tbox.clone(),
             ttx,
         );
 

@@ -16,3 +16,5 @@ pub type TripleTrace = TraceAgent<OrdKeySpine<Triple, usize, isize>>;
 pub type TripleCollection<'b> = Collection<Child<'b, Worker<Generic>, usize>, Triple>;
 pub type UnaryMaterialization = for<'a> fn(&TripleCollection<'a>) -> TripleCollection<'a>;
 pub type WorkerExecutionClosure = Box<dyn Fn(&mut Worker<Allocator>) -> () + Send + Sync + 'static>;
+pub type DataflowExecutionClosure<'a> =
+    Box<dyn FnOnce(&mut Child<'a, Worker<Allocator>, usize>) -> (TripleInputSession, TripleTrace)>;
