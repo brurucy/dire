@@ -75,6 +75,61 @@ pub fn tbox_spo_sco_materialization<'a>(tbox: &TripleCollection<'a>) -> TripleCo
     })
 }
 
+// This is indirectly tested on `rdfs.rs` and `rdfspp.rs`
+pub fn abox_sco_type_materialization<'a>(
+    tbox_sco_assertions: &KeyedTripleCollection<'a>,
+    abox_class_assertions: &KeyedTripleCollection<'a>,
+) -> KeyedTripleCollection<'a> {
+    let mut outer = tbox_sco_assertions.scope();
+    outer.region_named("CAX-SCO", |inn| {
+        let sco_assertions = tbox_sco_assertions.enter(inn);
+        let class_assertions = abox_class_assertions.enter(inn);
+
+        let class_assertions_arranged = class_assertions.arrange_by_key();
+
+        sco_assertions
+            .join_core(
+                &class_assertions_arranged,
+                |_key, &(_sco, y), &(z, type_)| Some((y, (z, type_))),
+            )
+            .leave()
+    })
+}
+
+// This is indirectly tested on `rdfs.rs` and `rdfspp.rs`
+pub fn abox_domain_and_range_type_materialization<'a>(
+    tbox_domain_assertions: &KeyedTripleCollection<'a>,
+    tbox_range_assertions: &KeyedTripleCollection<'a>,
+    abox_property_assertions: &KeyedTripleCollection<'a>,
+) -> (KeyedTripleCollection<'a>, KeyedTripleCollection<'a>) {
+    let mut outer = tbox_domain_assertions.scope();
+    outer.region_named("Domain and Range type rules", |inner| {
+        let property_assertions = abox_property_assertions.enter(inner);
+
+        let p_s_arr = property_assertions
+            .map(|(p, (s, _o))| (p, s))
+            .distinct()
+            .arrange_by_key_named("Arrange (p, s) for PRP-DOM");
+
+        let p_o_arr = property_assertions
+            .map(|(p, (_s, o))| (p, o))
+            .distinct()
+            .arrange_by_key_named("Arrange (p, o) for PRP-RNG");
+
+        let domain_assertions = tbox_domain_assertions.enter(inner);
+
+        let domain_type =
+            domain_assertions.join_core(&p_s_arr, |_p, &(_, x), &y| Some((x, (y, 4u32))));
+
+        let range_assertions = tbox_range_assertions.enter(inner);
+
+        let range_type =
+            range_assertions.join_core(&p_o_arr, |_p, &(_, x), &z| Some((x, (z, 4u32))));
+
+        (domain_type.leave(), range_type.leave())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::entrypoint::reason;
@@ -124,22 +179,22 @@ mod tests {
             abox_output_sink,
             termination_source,
         );
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32), usize, isize)> = vec![];
+        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
 
         while let Ok(diff) = tbox_output_source.try_recv() {
-            actual_tbox_diffs.push(diff)
+            actual_tbox_diffs.push(diff.0)
         }
 
         actual_tbox_diffs.sort_unstable();
         actual_tbox_diffs.dedup();
 
         let mut expected_tbox_diffs = vec![
-            ((professor, subClassOf, employee), 0, 1),
-            ((employee, subClassOf, tax_payer), 0, 1),
-            ((professor, subClassOf, tax_payer), 0, 1),
-            ((head_of, subPropertyOf, works_for), 0, 1),
-            ((works_for, subPropertyOf, member_of), 0, 1),
-            ((head_of, subPropertyOf, member_of), 0, 1),
+            (professor, subClassOf, employee),
+            (employee, subClassOf, tax_payer),
+            (professor, subClassOf, tax_payer),
+            (head_of, subPropertyOf, works_for),
+            (works_for, subPropertyOf, member_of),
+            (head_of, subPropertyOf, member_of),
         ];
 
         expected_tbox_diffs.sort_unstable();

@@ -100,19 +100,19 @@ mod tests {
             termination_source,
         );
 
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32), usize, isize)> = vec![];
+        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
         let mut actual_abox_diffs = actual_tbox_diffs.clone();
 
         while let Ok(diff) = tbox_output_source.try_recv() {
-            actual_tbox_diffs.push(diff)
+            actual_tbox_diffs.push(diff.0)
         }
 
         while let Ok(diff) = abox_output_source.try_recv() {
-            actual_abox_diffs.push(diff)
+            actual_abox_diffs.push(diff.0)
         }
 
-        let expected_tbox_diffs = vec![((28, 17, 29), 0, 1), ((28, 4, 13), 0, 1)];
-        let expected_abox_diffs = vec![((30, 28, 1), 0, 1), ((30, 29, 1), 0, 1)];
+        let expected_tbox_diffs = vec![(28, 17, 29), (28, 4, 13)];
+        let expected_abox_diffs = vec![(30, 28, 1), (30, 29, 1)];
 
         assert_eq!(expected_tbox_diffs, actual_tbox_diffs);
         assert_eq!(expected_abox_diffs, actual_abox_diffs);

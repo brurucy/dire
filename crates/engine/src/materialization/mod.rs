@@ -1,3 +1,3 @@
 pub mod common;
-mod rdfs;
-mod rdfspp;
+pub mod rdfs;
+pub mod rdfspp;
