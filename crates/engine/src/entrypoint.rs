@@ -1,5 +1,6 @@
-use crate::types::{
-    AboxMaterialization, Terminator, TripleSink, TripleSource, UnaryMaterialization,
+use crate::materialization::common::{dummy_binary_materialization, dummy_unary_materialization};
+use crate::model::types::{
+    BinaryMaterialization, Terminator, Triple, TripleSink, TripleSource, UnaryMaterialization,
 };
 use differential_dataflow::input::Input;
 use differential_dataflow::operators::arrange::ArrangeBySelf;
@@ -9,7 +10,7 @@ use timely::worker::Worker;
 pub fn reason(
     cfg: timely::Config,
     tbox_materialization: UnaryMaterialization,
-    abox_materialization: AboxMaterialization,
+    abox_materialization: BinaryMaterialization,
     tbox_input_source: TripleSource,
     abox_input_source: TripleSource,
     tbox_output_sink: TripleSink,
@@ -18,20 +19,22 @@ pub fn reason(
 ) -> () {
     timely::execute(cfg, move |worker: &mut Worker<Generic>| {
         let (mut tbox_input_session, mut tbox_trace) =
-            worker.dataflow_named::<usize, _, _>("tbox_materialization", |scope| {
+            worker.dataflow_named::<usize, _, _>("tbox_materialization", |mut scope| {
                 let tbox_output_sink = tbox_output_sink.clone();
-                let (tbox_input_session, tbox_collection) =
-                    scope.new_collection::<(usize, usize, usize), isize>();
+                let (tbox_input_session, tbox_collection) = scope.new_collection::<Triple, isize>();
                 let materialization = tbox_materialization(&tbox_collection);
-                materialization.inspect(move |x| tbox_output_sink.send(*x).unwrap());
+                materialization.inspect(move |((s, p, o), time, diff)| {
+                    tbox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
+                });
                 (tbox_input_session, materialization.arrange_by_self().trace)
             });
         let mut abox_input_session =
             worker.dataflow_named::<usize, _, _>("abox_materialization", |scope| {
                 let abox_output_sink = abox_output_sink.clone();
-                let (abox_input_session, abox_collection) =
-                    scope.new_collection::<(usize, usize, usize), isize>();
-                let tbox = tbox_trace.import(scope).as_collection(|k, _v| *k);
+                let (abox_input_session, abox_collection) = scope.new_collection::<Triple, isize>();
+                let tbox = tbox_trace
+                    .import(scope)
+                    .as_collection(|(s, p, o), _v| (*s, *p, *o));
                 let materialization = abox_materialization(&tbox, &abox_collection);
                 materialization.inspect(move |x| abox_output_sink.send(*x).unwrap());
                 abox_input_session
@@ -65,12 +68,15 @@ pub fn reason(
 #[cfg(test)]
 mod tests {
     use crate::entrypoint::reason;
-    use crate::types::TripleCollection;
+    use crate::materialization::common::{
+        dummy_binary_materialization, dummy_unary_materialization,
+    };
+    use crate::model::types::{RegularScope, TripleCollection};
     use timely::communication::Config;
 
     #[test]
     fn reason_works() {
-        let (tbox_output_sink, tbox_output_source) = flume::bounded(2);
+        let (tbox_output_sink, tbox_output_source) = flume::unbounded();
         let (tbox_input_sink, tbox_input_source) = flume::bounded(2);
         let (abox_output_sink, abox_output_source) = flume::bounded(2);
         let (abox_input_sink, abox_input_source) = flume::bounded(2);
@@ -85,8 +91,8 @@ mod tests {
                 communication: Config::Process(2),
                 worker: Default::default(),
             },
-            |tbox: &TripleCollection| return tbox.clone(),
-            |_tbox: &TripleCollection, abox: &TripleCollection| return abox.clone(),
+            dummy_unary_materialization,
+            dummy_binary_materialization,
             tbox_input_source,
             abox_input_source,
             tbox_output_sink,
@@ -94,21 +100,21 @@ mod tests {
             termination_source,
         );
 
-        let mut tbox_diffs: Vec<((usize, usize, usize), usize, isize)> = vec![];
-        let mut abox_diffs = tbox_diffs.clone();
+        let mut actual_tbox_diffs: Vec<((u32, u32, u32), usize, isize)> = vec![];
+        let mut actual_abox_diffs = actual_tbox_diffs.clone();
 
         while let Ok(diff) = tbox_output_source.try_recv() {
-            tbox_diffs.push(diff)
+            actual_tbox_diffs.push(diff)
         }
 
         while let Ok(diff) = abox_output_source.try_recv() {
-            abox_diffs.push(diff)
+            actual_abox_diffs.push(diff)
         }
 
         let expected_tbox_diffs = vec![((28, 17, 29), 0, 1), ((28, 4, 13), 0, 1)];
         let expected_abox_diffs = vec![((30, 28, 1), 0, 1), ((30, 29, 1), 0, 1)];
 
-        assert_eq!(expected_tbox_diffs, tbox_diffs);
-        assert_eq!(expected_abox_diffs, abox_diffs);
+        assert_eq!(expected_tbox_diffs, actual_tbox_diffs);
+        assert_eq!(expected_abox_diffs, actual_abox_diffs);
     }
 }
