@@ -56,6 +56,7 @@ pub fn reason(
                         .for_each(|triple| tbox_input_session.insert(triple.0));
                     tbox_input_session.advance_to(*tbox_input_session.epoch() + 1);
                     tbox_input_session.flush();
+                    worker.step();
                 }
 
                 if abox_input_source.is_full() | last_run {
@@ -65,10 +66,15 @@ pub fn reason(
                     println!("time: {}", abox_input_session.epoch());
                     abox_input_session.advance_to(*abox_input_session.epoch() + 1);
                     abox_input_session.flush();
+                    worker.step();
                 }
 
-                worker.step_while(|| tbox_probe.less_than(tbox_input_session.time()));
-                worker.step_while(|| abox_probe.less_than(abox_input_session.time()));
+                while tbox_probe.less_than(&tbox_input_session.time()) {
+                    worker.step();
+                }
+                while abox_probe.less_than(&abox_input_session.time()) {
+                    worker.step();
+                }
 
                 if last_run {
                     break;
