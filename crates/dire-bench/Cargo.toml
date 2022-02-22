@@ -1,0 +1,12 @@
+[package]
+name = "dire-bench"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "3.1.1"
+dire-engine = { path = "../dire-engine"}
+dire-parser = { path = "../dire-parser"}
+timely = "0.12.0"

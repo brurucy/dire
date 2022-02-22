@@ -1,0 +1,1 @@
+`cargo run ./data/tbox.ntenc ./data/abox.ntenc rdfs 1 1` 

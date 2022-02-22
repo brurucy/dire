@@ -1,0 +1,11 @@
+[package]
+name = "dire-engine"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+differential-dataflow = "0.12.0"
+timely = "0.12.0"
+flume = "0.10.10"

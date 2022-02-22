@@ -1,0 +1,18 @@
+[package]
+name = "dire"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dire-engine = { path = "crates/dire-engine"}
+dire-parser = { path = "crates/dire-parser"}
+timely = "0.12.0"
+tui = "0.17.0"
+crossterm = "0.23.0"
+flume = "0.10.11"
+unicode-width = "0.1.9"
+
+[profile.dev]
+split-debuginfo = "unpacked"
