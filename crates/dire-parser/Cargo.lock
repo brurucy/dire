@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "cli"
+name = "dire-parser"
 version = "0.1.0"
