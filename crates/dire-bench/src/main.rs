@@ -65,6 +65,7 @@ fn main() {
         tbox_output_source,
         abox_output_source,
         termination_source,
+        joinhandle,
     ) = entrypoint(single_threaded, batch_size, logic);
 
     let tbox_iter = load3enc(&t_path);
@@ -83,6 +84,23 @@ fn main() {
 
     termination_source.send(()).unwrap();
 
-    println!("materialized tbox triples: {}", tbox_output_source.len());
-    println!("materialized abox triples: {}", abox_output_source.len());
+    println!(
+        "materialized tbox triples before thread join: {}",
+        tbox_output_source.len()
+    );
+    println!(
+        "materialized abox triples before thread join: {}",
+        abox_output_source.len()
+    );
+
+    joinhandle.join().unwrap();
+
+    println!(
+        "materialized tbox triples after thread join: {}",
+        tbox_output_source.len()
+    );
+    println!(
+        "materialized abox triples after thread join: {}",
+        abox_output_source.len()
+    );
 }

@@ -41,6 +41,7 @@ pub fn reason(
                 let tbox = tbox_trace
                     .import(scope)
                     .as_collection(|(s, p, o), _v| (*s, *p, *o));
+                abox_collection.inspect(|x| println!("ABOX {:?}", x));
                 let materialization = abox_materialization(&tbox, &abox_collection);
                 materialization.inspect(move |((s, p, o), time, diff)| {
                     abox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
@@ -58,16 +59,17 @@ pub fn reason(
                     tbox_input_session.flush();
                 }
 
+                worker.step_while(|| tbox_probe.less_than(tbox_input_session.time()));
+
                 if abox_input_source.is_full() | last_run {
                     abox_input_source
                         .drain()
                         .for_each(|triple| abox_input_session.insert(triple.0));
-                    println!("time: {}", abox_input_session.epoch());
                     abox_input_session.advance_to(*abox_input_session.epoch() + 1);
                     abox_input_session.flush();
                 }
 
-                worker.step();
+                worker.step_while(|| abox_probe.less_than(abox_input_session.time()));
 
                 if last_run {
                     break;

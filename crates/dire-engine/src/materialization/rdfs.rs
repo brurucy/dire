@@ -39,7 +39,6 @@ pub fn rdfs<'a>(tbox: &TripleCollection<'a>, abox: &TripleCollection<'a>) -> Tri
     });
 
     let property_assertions = property_materialization.concat(&not_type_assertions);
-    //.inspect(|x| println!("not type assertions + join result {:?}", x));
 
     let (domain_type, range_type) = abox_domain_and_range_type_materialization(
         &domain_assertions,
@@ -47,11 +46,7 @@ pub fn rdfs<'a>(tbox: &TripleCollection<'a>, abox: &TripleCollection<'a>) -> Tri
         &property_assertions,
     );
 
-    //domain_type.inspect(|x| println!("domain: {:?}", x));
-    //range_type.inspect(|x| println!("range: {:?}", x));
-
     let class_assertions = type_assertions.concatenate(vec![domain_type, range_type]);
-    //.inspect(|x| println!("domain + range + class {:?}", x));
 
     let class_materialization = abox_sco_type_materialization(&sco_assertions, &class_assertions);
 
@@ -63,15 +58,8 @@ pub fn rdfs<'a>(tbox: &TripleCollection<'a>, abox: &TripleCollection<'a>) -> Tri
         let property_assertions = property_assertions
             .enter(inner)
             .map(|(p, (x, y))| (x, p, y));
-        //.inspect(|x| println!("property assertions: {:?}", x));
 
         let class_assertions = class_assertions.enter(inner).map(|(y, (x, p))| (x, p, y));
-        //.inspect(|x| println!("class assertions: {:?}", x));
-
-        abox.concat(&property_assertions)
-            .inspect(|x| println!("abox + property assertion {:?}", x))
-            .consolidate()
-            .inspect(|x| println!("abox + property assertion dedup {:?}", x));
 
         abox.concat(&property_assertions)
             .concat(&class_assertions)

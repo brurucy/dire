@@ -26,6 +26,7 @@ pub fn entrypoint(
     TripleOutputSource,
     TripleOutputSource,
     TerminationSink,
+    std::thread::JoinHandle<()>,
 ) {
     let (tbox_output_sink, tbox_output_source) = flume::unbounded();
     let (tbox_input_sink, tbox_input_source) = flume::bounded(batch_size);
@@ -33,7 +34,7 @@ pub fn entrypoint(
     let (abox_input_sink, abox_input_source) = flume::bounded(batch_size);
     let (termination_sink, termination_source) = flume::bounded(1);
 
-    thread::spawn(move || {
+    let join_handle = thread::spawn(move || {
         let abox_materialization = match logic {
             Engine::RDFS => rdfs,
             Engine::RDFSpp => rdfspp,
@@ -61,6 +62,7 @@ pub fn entrypoint(
         tbox_output_source,
         abox_output_source,
         termination_sink,
+        join_handle,
     )
 }
 
