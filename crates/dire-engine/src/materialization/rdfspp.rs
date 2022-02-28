@@ -250,8 +250,8 @@ mod tests {
             abox_output_sink,
             termination_source,
         );
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
-        let mut actual_abox_diffs: Vec<((u32, u32, u32))> = vec![];
+        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
+        let mut actual_abox_diffs: Vec<(u32, u32, u32)> = vec![];
 
         while let Ok(diff) = tbox_output_source.try_recv() {
             actual_tbox_diffs.push(diff.0)

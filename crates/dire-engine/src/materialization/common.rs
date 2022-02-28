@@ -1,11 +1,11 @@
-use crate::model::consts::constants::rdfs::{r#type, subClassOf, subPropertyOf};
-use crate::model::types::{KeyedTriple, KeyedTripleCollection, Triple, TripleCollection};
 use differential_dataflow::lattice::Lattice;
 use differential_dataflow::operators::arrange::ArrangeByKey;
 use differential_dataflow::operators::{iterate, JoinCore, Threshold};
-use differential_dataflow::Collection;
 use timely::dataflow::Scope;
 use timely::order::Product;
+
+use crate::model::consts::constants::rdfs::{r#type, subClassOf, subPropertyOf};
+use crate::model::types::{KeyedTripleCollection, TripleCollection};
 
 pub fn dummy_unary_materialization<'a>(collection: &TripleCollection<'a>) -> TripleCollection<'a> {
     collection.clone()
@@ -132,13 +132,14 @@ pub fn abox_domain_and_range_type_materialization<'a>(
 
 #[cfg(test)]
 mod tests {
+    use timely::communication::Config;
+
     use crate::materialization::common::{
         dummy_binary_materialization, tbox_spo_sco_materialization,
     };
     use crate::model::consts::constants::rdfs::{subClassOf, subPropertyOf};
     use crate::model::consts::constants::MAX_CONST;
     use crate::reason::reason;
-    use timely::communication::Config;
 
     #[test]
     fn tbox_spo_sco_materialization_works() {
@@ -179,7 +180,7 @@ mod tests {
             abox_output_sink,
             termination_source,
         );
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
+        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
 
         while let Ok(diff) = tbox_output_source.try_recv() {
             actual_tbox_diffs.push(diff.0)

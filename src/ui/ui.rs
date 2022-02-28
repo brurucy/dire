@@ -117,8 +117,8 @@ pub fn ui<B: Backend>(
         .horizontal_margin(2)
         .constraints(
             [
-                Constraint::Percentage(8),
-                Constraint::Percentage(82),
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
                 Constraint::Percentage(10),
             ]
             .as_ref(),

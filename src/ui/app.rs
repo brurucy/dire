@@ -41,6 +41,7 @@ pub fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Resu
         tbox_output_source,
         abox_output_source,
         termination_source,
+        _joinhandle,
     ) = entrypoint(single_threaded, 1, Engine::RDFSpp);
 
     let (tbox_ui_notifier, tbox_ui_receiver) = flume::unbounded();

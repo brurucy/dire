@@ -1,14 +1,12 @@
+use std::thread;
+
 use crate::materialization::common::{
     dummy_binary_materialization, dummy_unary_materialization, tbox_spo_sco_materialization,
 };
 use crate::materialization::rdfs::rdfs;
 use crate::materialization::rdfspp::rdfspp;
-use crate::model::types::{
-    TerminationSink, TripleInputSink, TripleInputSource, TripleOutputSource,
-};
+use crate::model::types::{TerminationSink, TripleInputSink, TripleOutputSource};
 use crate::reason::reason;
-use std::thread;
-use timely::communication::Config;
 
 pub enum Engine {
     RDFS,
@@ -67,14 +65,14 @@ pub fn entrypoint(
 }
 
 mod tests {
+    use std::time::Duration;
+
     use crate::entrypoint::{entrypoint, Engine};
     use crate::model::consts::constants::owl::{
         inverseOf, Class, ObjectProperty, TransitiveProperty,
     };
     use crate::model::consts::constants::rdfs::{domain, r#type, range, subClassOf, subPropertyOf};
     use crate::model::consts::constants::MAX_CONST;
-    use std::thread;
-    use std::time::Duration;
 
     #[test]
     fn entrypoint_rdfs_works() {
@@ -85,6 +83,7 @@ mod tests {
             tbox_output_source,
             abox_output_source,
             termination_source,
+            _joinhandle,
         ) = entrypoint(single_threaded, 1, Engine::RDFS);
         let employee = MAX_CONST + 1;
         let faculty = MAX_CONST + 2;
@@ -176,8 +175,8 @@ mod tests {
 
         termination_source.send(()).unwrap();
 
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
-        let mut actual_abox_diffs: Vec<((u32, u32, u32))> = vec![];
+        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
+        let mut actual_abox_diffs: Vec<(u32, u32, u32)> = vec![];
 
         while let Ok(diff) = tbox_output_source.recv_timeout(Duration::from_millis(50)) {
             actual_tbox_diffs.push(diff.0)
@@ -258,6 +257,7 @@ mod tests {
             tbox_output_source,
             abox_output_source,
             termination_source,
+            _joinhandle,
         ) = entrypoint(single_threaded, 1, Engine::RDFSpp);
         // Filling the tbox
         let employee = MAX_CONST + 1;
@@ -350,8 +350,8 @@ mod tests {
 
         termination_source.send(()).unwrap();
 
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
-        let mut actual_abox_diffs: Vec<((u32, u32, u32))> = vec![];
+        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
+        let mut actual_abox_diffs: Vec<(u32, u32, u32)> = vec![];
 
         while let Ok(diff) = tbox_output_source.recv_timeout(Duration::from_millis(50)) {
             actual_tbox_diffs.push(diff.0)
@@ -445,6 +445,7 @@ mod tests {
             tbox_output_source,
             abox_output_source,
             termination_source,
+            _joinhandle,
         ) = entrypoint(single_threaded, 1, Engine::Dummy);
         // Filling the tbox
         let employee = MAX_CONST + 1;
@@ -537,8 +538,8 @@ mod tests {
 
         termination_source.send(()).unwrap();
 
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
-        let mut actual_abox_diffs: Vec<((u32, u32, u32))> = vec![];
+        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
+        let mut actual_abox_diffs: Vec<(u32, u32, u32)> = vec![];
 
         while let Ok(diff) = tbox_output_source.recv_timeout(Duration::from_millis(50)) {
             actual_tbox_diffs.push(diff.0)

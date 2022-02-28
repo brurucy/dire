@@ -5,9 +5,12 @@ use crate::model::types::{
 };
 use differential_dataflow::input::Input;
 use differential_dataflow::operators::arrange::ArrangeBySelf;
+use differential_dataflow::trace::{Trace, TraceReader};
+use std::thread;
 use std::time::Duration;
 use timely::communication::allocator::Generic;
 use timely::worker::{AsWorker, Worker};
+use timely::PartialOrder;
 
 pub fn reason(
     cfg: timely::Config,
@@ -25,13 +28,16 @@ pub fn reason(
                 let tbox_output_sink = tbox_output_sink.clone();
                 let (tbox_input_session, tbox_collection) = scope.new_collection::<Triple, isize>();
                 let materialization = tbox_materialization(&tbox_collection);
-                materialization.inspect(move |((s, p, o), time, diff)| {
-                    tbox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
-                });
                 (
                     tbox_input_session,
                     materialization.arrange_by_self().trace,
-                    materialization.probe(),
+                    materialization
+                        .inspect_batch(move |t, xs| {
+                            for ((s, p, o), time, diff) in xs {
+                                tbox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
+                            }
+                        })
+                        .probe(),
                 )
             });
         let (mut abox_input_session, abox_probe) =
@@ -41,44 +47,54 @@ pub fn reason(
                 let tbox = tbox_trace
                     .import(scope)
                     .as_collection(|(s, p, o), _v| (*s, *p, *o));
-                abox_collection.inspect(|x| println!("ABOX {:?}", x));
                 let materialization = abox_materialization(&tbox, &abox_collection);
-                materialization.inspect(move |((s, p, o), time, diff)| {
-                    abox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
-                });
-                (abox_input_session, materialization.probe())
+                (
+                    abox_input_session,
+                    materialization
+                        .inspect_batch(move |t, xs| {
+                            for ((s, p, o), time, diff) in xs {
+                                abox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
+                            }
+                        })
+                        .probe(),
+                )
             });
+        let mut last_run = false;
         if worker.index() == 0 {
-            let mut last_run = false;
             loop {
-                if tbox_input_source.is_full() | last_run {
+                if abox_input_source.is_full() | tbox_input_source.is_full() | last_run {
                     tbox_input_source
                         .drain()
                         .for_each(|triple| tbox_input_session.insert(triple.0));
                     tbox_input_session.advance_to(*tbox_input_session.epoch() + 1);
                     tbox_input_session.flush();
-                }
 
-                worker.step_while(|| tbox_probe.less_than(tbox_input_session.time()));
-
-                if abox_input_source.is_full() | last_run {
                     abox_input_source
                         .drain()
                         .for_each(|triple| abox_input_session.insert(triple.0));
+
                     abox_input_session.advance_to(*abox_input_session.epoch() + 1);
                     abox_input_session.flush();
                 }
-
-                worker.step_while(|| abox_probe.less_than(abox_input_session.time()));
+                worker.step_or_park_while(Some(Duration::from_millis(5)), || {
+                    tbox_probe.less_than(tbox_input_session.time())
+                });
+                worker.step_or_park_while(Some(Duration::from_millis(5)), || {
+                    abox_probe.less_than(abox_input_session.time())
+                });
 
                 if last_run {
+                    abox_input_session.close();
+                    tbox_input_session.close();
+                    //worker.step_while(|| abox_probe.less_than(&(last_ts + 1)));
                     break;
                 }
+
                 if let Ok(_) = terminator.try_recv() {
                     last_run = true
                 }
             }
-        };
+        }
     })
     .unwrap();
 }
@@ -118,7 +134,7 @@ mod tests {
             termination_source,
         );
 
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
+        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
         let mut actual_abox_diffs = actual_tbox_diffs.clone();
 
         while let Ok(diff) = tbox_output_source.try_recv() {

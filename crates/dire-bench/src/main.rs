@@ -1,6 +1,8 @@
 use clap::{Arg, Command};
 use dire_engine::entrypoint::{entrypoint, Engine};
 use dire_parser::load3enc;
+use std::thread;
+use std::time::Duration;
 
 fn main() {
     let matches = Command::new("differential-reasoner")
@@ -58,7 +60,7 @@ fn main() {
         _ => Engine::Dummy,
     };
 
-    let single_threaded = timely::Config::process(workers);
+    let process = timely::Config::process(workers);
     let (
         tbox_input_sink,
         abox_input_sink,
@@ -66,7 +68,7 @@ fn main() {
         abox_output_source,
         termination_source,
         joinhandle,
-    ) = entrypoint(single_threaded, batch_size, logic);
+    ) = entrypoint(process, batch_size, logic);
 
     let tbox_iter = load3enc(&t_path);
     if let Ok(parsed_nt) = tbox_iter {
@@ -84,23 +86,8 @@ fn main() {
 
     termination_source.send(()).unwrap();
 
-    println!(
-        "materialized tbox triples before thread join: {}",
-        tbox_output_source.len()
-    );
-    println!(
-        "materialized abox triples before thread join: {}",
-        abox_output_source.len()
-    );
-
     joinhandle.join().unwrap();
 
-    println!(
-        "materialized tbox triples after thread join: {}",
-        tbox_output_source.len()
-    );
-    println!(
-        "materialized abox triples after thread join: {}",
-        abox_output_source.len()
-    );
+    println!("materialized tbox triples: {}", tbox_output_source.len());
+    println!("materialized abox triples: {}", abox_output_source.len());
 }

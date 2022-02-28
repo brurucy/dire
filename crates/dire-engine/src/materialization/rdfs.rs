@@ -1,12 +1,12 @@
-use crate::materialization::common::{
-    abox_domain_and_range_type_materialization, abox_sco_type_materialization,
-};
-use crate::model::consts::constants::owl::{Class, ObjectProperty};
-use crate::model::consts::constants::rdfs::{domain, r#type, range, subClassOf, subPropertyOf};
-use crate::model::types::TripleCollection;
 use differential_dataflow::operators::arrange::ArrangeByKey;
 use differential_dataflow::operators::{Consolidate, JoinCore, Threshold, ThresholdTotal};
 use timely::dataflow::Scope;
+
+use crate::materialization::common::{
+    abox_domain_and_range_type_materialization, abox_sco_type_materialization,
+};
+use crate::model::consts::constants::rdfs::{domain, r#type, range, subClassOf, subPropertyOf};
+use crate::model::types::TripleCollection;
 
 pub fn rdfs<'a>(tbox: &TripleCollection<'a>, abox: &TripleCollection<'a>) -> TripleCollection<'a> {
     let tbox = tbox.map(|(s, p, o)| (s, (p, o)));
@@ -70,6 +70,8 @@ pub fn rdfs<'a>(tbox: &TripleCollection<'a>, abox: &TripleCollection<'a>) -> Tri
 
 #[cfg(test)]
 mod tests {
+    use timely::communication::Config;
+
     use crate::materialization::common::tbox_spo_sco_materialization;
     use crate::materialization::rdfs::rdfs;
     use crate::model::consts::constants::owl::{
@@ -78,7 +80,6 @@ mod tests {
     use crate::model::consts::constants::rdfs::{domain, r#type, range, subClassOf, subPropertyOf};
     use crate::model::consts::constants::MAX_CONST;
     use crate::reason::reason;
-    use timely::communication::Config;
 
     #[test]
     fn rdfs_works() {
@@ -190,8 +191,8 @@ mod tests {
             abox_output_sink,
             termination_source,
         );
-        let mut actual_tbox_diffs: Vec<((u32, u32, u32))> = vec![];
-        let mut actual_abox_diffs: Vec<((u32, u32, u32))> = vec![];
+        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
+        let mut actual_abox_diffs: Vec<(u32, u32, u32)> = vec![];
 
         while let Ok(diff) = tbox_output_source.try_recv() {
             actual_tbox_diffs.push(diff.0)
