@@ -1,5 +1,5 @@
 use crossterm::event;
-use crossterm::event::Event::Key;
+
 use crossterm::event::KeyCode;
 use flume::RecvError;
 use std::thread;

@@ -1,12 +1,12 @@
-use crate::ui::app::App;
+
 use crate::ui::input::InputMode;
-use flume::Receiver;
-use std::borrow::Borrow;
+
+
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans, Text};
-use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use tui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 use unicode_width::UnicodeWidthStr;
 
@@ -68,7 +68,7 @@ fn list_messages<B: Backend>(
     tbox_messages: Vec<((u32, u32, u32), usize, isize)>,
     area: Rect,
 ) {
-    let mut items: Vec<ListItem> = tbox_messages
+    let items: Vec<ListItem> = tbox_messages
         .iter()
         .map(|each| ListItem::new(format!("{} {} {}", each.0 .0, each.0 .1, each.0 .2)))
         .collect();

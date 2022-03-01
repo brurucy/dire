@@ -1,14 +1,14 @@
 use crate::ui::event::{Events, InputEvent};
 use crate::ui::input::InputMode;
 use crate::ui::ui::ui;
-use crossterm::event;
-use crossterm::event::{Event, KeyCode};
+
+use crossterm::event::{KeyCode};
 use dire_engine::entrypoint::{entrypoint, Engine};
-use dire_engine::model::types::Triple;
+
 use dire_parser::load3enc;
-use std::borrow::Borrow;
-use std::ops::{Add, Deref};
-use std::sync::{Arc, Mutex, RwLock};
+
+
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{io, thread};
 use tui::backend::Backend;

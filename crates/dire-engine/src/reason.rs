@@ -1,12 +1,10 @@
-use crate::materialization::common::{dummy_binary_materialization, dummy_unary_materialization};
 use crate::model::types::{
-    BinaryMaterialization, Terminator, Triple, TripleInputSink, TripleInputSource,
-    TripleOutputSink, UnaryMaterialization,
+    BinaryMaterialization, Terminator, Triple, TripleInputSource, TripleOutputSink,
+    UnaryMaterialization,
 };
 use differential_dataflow::input::Input;
 use differential_dataflow::operators::arrange::ArrangeBySelf;
 use differential_dataflow::trace::{Trace, TraceReader};
-use std::thread;
 use std::time::Duration;
 use timely::communication::allocator::Generic;
 use timely::worker::{AsWorker, Worker};

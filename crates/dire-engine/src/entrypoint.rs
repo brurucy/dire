@@ -3,6 +3,7 @@ use std::thread;
 use crate::materialization::common::{
     dummy_binary_materialization, dummy_unary_materialization, tbox_spo_sco_materialization,
 };
+use crate::materialization::owl2rl::{owl2rl_abox, owl2rl_tbox};
 use crate::materialization::rdfs::rdfs;
 use crate::materialization::rdfspp::rdfspp;
 use crate::model::types::{TerminationSink, TripleInputSink, TripleOutputSource};
@@ -11,6 +12,7 @@ use crate::reason::reason;
 pub enum Engine {
     RDFS,
     RDFSpp,
+    OWL2RL,
     Dummy,
 }
 
@@ -33,14 +35,16 @@ pub fn entrypoint(
     let (termination_sink, termination_source) = flume::bounded(1);
 
     let join_handle = thread::spawn(move || {
+        let tbox_materialization = match logic {
+            Engine::Dummy => dummy_unary_materialization,
+            Engine::OWL2RL => owl2rl_tbox,
+            _ => tbox_spo_sco_materialization,
+        };
         let abox_materialization = match logic {
             Engine::RDFS => rdfs,
             Engine::RDFSpp => rdfspp,
+            Engine::OWL2RL => owl2rl_abox,
             Engine::Dummy => dummy_binary_materialization,
-        };
-        let tbox_materialization = match logic {
-            Engine::Dummy => dummy_unary_materialization,
-            _ => tbox_spo_sco_materialization,
         };
         reason(
             cfg,
