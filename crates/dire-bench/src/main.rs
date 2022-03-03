@@ -1,3 +1,4 @@
+use std::fs::File;
 use clap::{Arg, Command};
 use dire_engine::entrypoint::{entrypoint, Engine};
 use dire_parser::load3enc;
@@ -43,6 +44,7 @@ fn main() {
     let t_path: String = matches.value_of("TBOX_PATH").unwrap().to_string();
     let a_path: String = matches.value_of("ABOX_PATH").unwrap().to_string();
     let expressivity: String = matches.value_of("EXPRESSIVITY").unwrap().to_string();
+
     let workers: usize = matches
         .value_of("WORKERS")
         .unwrap()
@@ -57,6 +59,7 @@ fn main() {
     let logic = match expressivity.as_str() {
         "rdfspp" => Engine::RDFSpp,
         "rdfs" => Engine::RDFS,
+        "owl2rl" => Engine::OWL2RL,
         _ => Engine::Dummy,
     };
 
@@ -90,4 +93,5 @@ fn main() {
 
     println!("materialized tbox triples: {}", tbox_output_source.len());
     println!("materialized abox triples: {}", abox_output_source.len());
+
 }

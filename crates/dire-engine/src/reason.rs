@@ -58,13 +58,16 @@ pub fn reason(
                 )
             });
         let mut last_run = false;
+        let mut last_ts = 0;
         if worker.index() == 0 {
             loop {
                 if abox_input_source.is_full() | tbox_input_source.is_full() | last_run {
                     tbox_input_source
                         .drain()
                         .for_each(|triple| tbox_input_session.insert(triple.0));
+
                     tbox_input_session.advance_to(*tbox_input_session.epoch() + 1);
+                    last_ts += 1;
                     tbox_input_session.flush();
 
                     abox_input_source
@@ -84,7 +87,8 @@ pub fn reason(
                 if last_run {
                     abox_input_session.close();
                     tbox_input_session.close();
-                    //worker.step_while(|| abox_probe.less_than(&(last_ts + 1)));
+                    worker.step_while(|| tbox_probe.less_than(&(last_ts + 1)));
+                    worker.step_while(|| abox_probe.less_than(&(last_ts + 1)));
                     break;
                 }
 

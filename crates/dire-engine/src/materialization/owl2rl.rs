@@ -15,81 +15,118 @@ use crate::model::types::TripleCollection;
 pub fn owl2rl_tbox<'a>(tbox: &TripleCollection<'a>) -> TripleCollection<'a> {
     let mut outer = tbox.scope();
 
+    let sas_assertions = tbox
+        .filter(|(s, p, o)| *p == sameAs)
+        .map(|(s, p, o)| (s, o));
+    let sas_assertions_arr = sas_assertions.arrange_by_key();
+    let sas_assertions_by_o = sas_assertions.map(|(s, o)| (o, s));
+
+    let cls_assertions = tbox.filter(|(s, p, o)| *o == Class).map(|(s, p, o)| (s, s));
+
+    let sco_assertions = tbox
+        .filter(|(s, p, o)| *p == subClassOf)
+        .map(|(s, p, o)| (s, o));
+    let sco_assertions_arr = sco_assertions.arrange_by_key();
+    let sco_assertions_by_o = sco_assertions.map(|(s, o)| (o, s));
+    let sco_assertions_by_so = sco_assertions.map(|(s, o)| ((s, o), s)).arrange_by_key();
+    let sco_assertions_by_os = sco_assertions_by_o.map(|(o, s)| ((o, s), s));
+
+    let spo_assertions = tbox
+        .filter(|(s, p, o)| *p == subPropertyOf)
+        .map(|(s, p, o)| (s, o));
+    let spo_assertions_arr = spo_assertions.arrange_by_key();
+    let spo_assertions_by_o = spo_assertions.map(|(s, o)| (o, s));
+    let spo_assertions_by_o_arr = spo_assertions_by_o.arrange_by_key();
+    let spo_assertions_by_so = spo_assertions.map(|(s, o)| ((s, o), s)).arrange_by_key();
+    let spo_assertions_by_os = spo_assertions.map(|(s, o)| ((o, s), s));
+
+    let eqc_assertions = tbox
+        .filter(|(s, p, o)| *p == equivalentClass)
+        .map(|(s, p, o)| (s, o));
+
+    let obj_assertions = tbox
+        .filter(|(s, p, o)| *s == ObjectProperty)
+        .map(|(s, p, o)| (s, s));
+
+    let onp_assertions = tbox
+        .filter(|(s, p, o)| *p == onProperty)
+        .map(|(s, p, o)| (s, o));
+    let onp_assertions_arr = onp_assertions.arrange_by_key();
+    let onp_assertions_by_so = onp_assertions.map(|(s, o)| ((s, o), s)).arrange_by_key();
+
+    let eqp_assertions = tbox
+        .filter(|(s, p, o)| *p == equivalentProperty)
+        .map(|(s, p, o)| (s, o));
+
+    let dom_assertions = tbox
+        .filter(|(s, p, o)| *p == domain)
+        .map(|(s, p, o)| (s, o));
+    let dom_assertions_by_o = dom_assertions.map(|(s, o)| (o, s));
+
+    let rng_assertions = tbox.filter(|(s, p, o)| *p == range).map(|(s, p, o)| (s, o));
+    let rng_assertions_by_o = rng_assertions.map(|(s, o)| (o, s));
+
+    let hv_assertions = tbox
+        .filter(|(s, p, o)| *p == hasValue)
+        .map(|(s, p, o)| (s, o));
+    let hv_assertions_by_o = hv_assertions.map(|(s, o)| (o, s)).arrange_by_key();
+
+    let svf_assertions = tbox
+        .filter(|(s, p, o)| *p == someValuesFrom)
+        .map(|(s, p, o)| (s, o));
+    let svf_assertions_by_o = svf_assertions.map(|(o, s)| (o, s)).arrange_by_key();
+
+    let avf_assertions = tbox
+        .filter(|(s, p, o)| *p == allValuesFrom)
+        .map(|(s, p, o)| (s, o));
+    let avf_assertions_by_o = avf_assertions.map(|(o, s)| (o, s)).arrange_by_key();
+
     outer
         .iterative::<usize, _, _>(|inner| {
             let tbox_var = iterate::Variable::new(inner, Product::new(Default::default(), 1));
 
             let tbox_new = tbox_var.distinct();
 
-            let tbox = &tbox.enter(inner);
+            let sas_assertions = sas_assertions.enter(&inner);
+            let sas_assertions_arr = sas_assertions_arr.enter(&inner);
+            let sas_assertions_by_o = sas_assertions_by_o.enter(&inner);
 
-            let sas_assertions = tbox
-                .filter(|(s, p, o)| *p == sameAs)
-                .map(|(s, p, o)| (s, o));
-            let sas_assertions_arr = sas_assertions.arrange_by_key();
-            let sas_assertions_by_o = sas_assertions.map(|(s, o)| (o, s));
+            let cls_assertions = cls_assertions.enter(&inner);
 
-            let cls_assertions = tbox.filter(|(s, p, o)| *o == Class).map(|(s, p, o)| (s, s));
+            let sco_assertions_arr = sco_assertions_arr.enter(&inner);
+            let sco_assertions_by_o = sco_assertions_by_o.enter(&inner);
+            let sco_assertions_by_so = sco_assertions_by_so.enter(&inner);
+            let sco_assertions_by_os = sco_assertions_by_os.enter(&inner);
 
-            let sco_assertions = tbox
-                .filter(|(s, p, o)| *p == subClassOf)
-                .map(|(s, p, o)| (s, o));
-            let sco_assertions_arr = sco_assertions.arrange_by_key();
-            let sco_assertions_by_o = sco_assertions.map(|(s, o)| (o, s));
-            let sco_assertions_by_so = sco_assertions.map(|(s, o)| ((s, o), s)).arrange_by_key();
-            let sco_assertions_by_os = sco_assertions_by_o.map(|(o, s)| ((o, s), s));
+            let spo_assertions_arr = spo_assertions_arr.enter(&inner);
+            let spo_assertions_by_o = spo_assertions_by_o.enter(&inner);
+            let spo_assertions_by_o_arr = spo_assertions_by_o_arr.enter(&inner);
+            let spo_assertions_by_so = spo_assertions_by_so.enter(&inner);
+            let spo_assertions_by_os = spo_assertions_by_os.enter(&inner);
 
-            let spo_assertions = tbox
-                .filter(|(s, p, o)| *p == subPropertyOf)
-                .map(|(s, p, o)| (s, o));
-            let spo_assertions_arr = spo_assertions.arrange_by_key();
-            let spo_assertions_by_o = spo_assertions.map(|(s, o)| (o, s));
-            let spo_assertions_by_o_arr = spo_assertions_by_o.arrange_by_key();
-            let spo_assertions_by_so = spo_assertions.map(|(s, o)| ((s, o), s)).arrange_by_key();
-            let spo_assertions_by_os = spo_assertions.map(|(s, o)| ((o, s), s));
+            let eqc_assertions = eqc_assertions.enter(&inner);
 
-            let eqc_assertions = tbox
-                .filter(|(s, p, o)| *p == equivalentClass)
-                .map(|(s, p, o)| (s, o));
+            let obj_assertions = obj_assertions.enter(&inner);
 
-            let obj_assertions = tbox
-                .filter(|(s, p, o)| *s == ObjectProperty)
-                .map(|(s, p, o)| (s, s));
+            let onp_assertions_arr = onp_assertions_arr.enter(&inner);
+            let onp_assertions_by_so = onp_assertions_by_so.enter(&inner);
 
-            let onp_assertions = tbox
-                .filter(|(s, p, o)| *p == onProperty)
-                .map(|(s, p, o)| (s, o));
+            let eqp_assertions = eqp_assertions.enter(&inner);
 
-            let onp_assertions_arr = onp_assertions.arrange_by_key();
+            let dom_assertions = dom_assertions.enter(&inner);
+            let dom_assertions_by_o = dom_assertions_by_o.enter(&inner);
 
-            let onp_assertions_by_so = onp_assertions.map(|(s, o)| ((s, o), s)).arrange_by_key();
+            let rng_assertions = rng_assertions.enter(&inner);
+            let rng_assertions_by_o = rng_assertions_by_o.enter(&inner);
 
-            let eqp_assertions = tbox
-                .filter(|(s, p, o)| *p == equivalentProperty)
-                .map(|(s, p, o)| (s, o));
+            let hv_assertions = hv_assertions.enter(&inner);
+            let hv_assertions_by_o = hv_assertions_by_o.enter(&inner);
 
-            let dom_assertions = tbox
-                .filter(|(s, p, o)| *p == domain)
-                .map(|(s, p, o)| (s, o));
-            let dom_assertions_by_o = dom_assertions.map(|(s, o)| (o, s));
+            let svf_assertions = svf_assertions.enter(&inner);
+            let svf_assertions_by_o = svf_assertions_by_o.enter(&inner);
 
-            let rng_assertions = tbox.filter(|(s, p, o)| *p == range).map(|(s, p, o)| (s, o));
-            let rng_assertions_by_o = rng_assertions.map(|(s, o)| (o, s));
-
-            let hv_assertions = tbox
-                .filter(|(s, p, o)| *p == hasValue)
-                .map(|(s, p, o)| (s, o));
-            let hv_assertions_by_o = hv_assertions.map(|(s, o)| (o, s)).arrange_by_key();
-
-            let svf_assertions = tbox
-                .filter(|(s, p, o)| *p == someValuesFrom)
-                .map(|(s, p, o)| (s, o));
-            let svf_assertions_by_o = svf_assertions.map(|(o, s)| (o, s)).arrange_by_key();
-
-            let avf_assertions = tbox
-                .filter(|(s, p, o)| *p == allValuesFrom)
-                .map(|(s, p, o)| (s, o));
-            let avf_assertions_by_o = avf_assertions.map(|(o, s)| (o, s)).arrange_by_key();
+            let avf_assertions = avf_assertions.enter(&inner);
+            let avf_assertions_by_o = avf_assertions_by_o.enter(&inner);
 
             // eq-sym
 
@@ -280,18 +317,88 @@ pub fn owl2rl_tbox<'a>(tbox: &TripleCollection<'a>) -> TripleCollection<'a> {
                 scm_dom2, scm_rng1, scm_rng2, scm_hv, scm_svf1, scm_svf2, scm_avf1, scm_avf2,
             ]);
 
-            tbox_var.set(&tbox.concatenate(vec![eq, scm]));
+            tbox_var.set(&tbox.enter(&inner).concatenate(vec![eq, scm]));
 
             tbox_new.leave()
         })
         .concat(&tbox)
+        .consolidate()
 }
 
 pub fn owl2rl_abox<'a>(
-    abox: &TripleCollection<'a>,
     tbox: &TripleCollection<'a>,
+    abox: &TripleCollection<'a>,
 ) -> TripleCollection<'a> {
     let mut outer = abox.scope();
+
+    let sco_assertions = tbox
+        .filter(|(s, p, o)| *p == subClassOf)
+        .map(|(s, p, o)| (s, o));
+
+    let eqc_assertions = tbox
+        .filter(|(s, p, o)| *p == equivalentClass)
+        .map(|(s, p, o)| (s, o));
+
+    let type_assertions_by_o = abox
+        .filter(|(s, p, o)| *p == r#type)
+        .map(|(s, p, o)| (o, s))
+        .arrange_by_key();
+
+    let sas_assertions = tbox
+        .filter(|(s, p, o)| *p == sameAs)
+        .map(|(s, p, o)| (s, o));
+
+    let abox_by_s = abox.map(|(s, p, o)| (s, (p, o))).arrange_by_key();
+    let abox_by_p = abox.map(|(s, p, o)| (p, (s, o))).arrange_by_key();
+    let abox_by_o = abox.map(|(s, p, o)| (o, (s, p))).arrange_by_key();
+
+    let dom_assertions = tbox
+        .filter(|(s, p, o)| *p == domain)
+        .map(|(s, p, o)| (s, o));
+
+    let rng_assertions = tbox.filter(|(s, p, o)| *p == range).map(|(s, p, o)| (s, o));
+
+    let symp_assertions = tbox
+        .filter(|(s, p, o)| *o == SymmetricProperty)
+        .map(|(s, p, o)| (p, p));
+
+    let trans_assertions = tbox
+        .filter(|(s, p, o)| *o == TransitiveProperty)
+        .map(|(s, p, o)| (p, p));
+
+    let spo_assertions = tbox
+        .filter(|(s, p, o)| *p == subPropertyOf)
+        .map(|(s, p, o)| (s, o));
+
+    let eqp_assertions = tbox
+        .filter(|(s, p, o)| *p == equivalentProperty)
+        .map(|(s, p, o)| (s, o));
+
+    let inv_assertions = tbox
+        .filter(|(s, p, o)| *p == inverseOf)
+        .map(|(s, p, o)| (s, o));
+
+    let abox_by_sp = abox.map(|(s, p, o)| ((s, p), o)).arrange_by_key();
+
+    let svf_assertions = tbox
+        .filter(|(s, p, o)| *p == someValuesFrom)
+        .map(|(s, p, o)| (s, o));
+
+    let avf_assertions = tbox
+        .filter(|(s, p, o)| *p == allValuesFrom)
+        .map(|(s, p, o)| (s, o));
+
+    let op_assertions = tbox
+        .filter(|(s, p, o)| *p == onProperty)
+        .map(|(s, p, o)| (s, o))
+        .arrange_by_key();
+
+    let hv_assertions = tbox
+        .filter(|(s, p, o)| *p == hasValue)
+        .map(|(s, p, o)| (s, o));
+
+    let abox_by_so = abox.map(|(s, p, o)| ((s, o), p)).arrange_by_key();
+    let abox_by_po = abox.map(|(s, p, o)| ((p, o), s)).arrange_by_key();
 
     outer
         .iterative::<usize, _, _>(|inner| {
@@ -300,76 +407,45 @@ pub fn owl2rl_abox<'a>(
             let abox_new = abox_var.distinct();
 
             let abox = &abox.enter(inner);
-            let tbox = &tbox.enter(inner);
 
-            let sco_assertions = tbox
-                .filter(|(s, p, o)| *p == subClassOf)
-                .map(|(s, p, o)| (s, o));
+            let sco_assertions = sco_assertions.enter(&inner);
 
-            let eqc_assertions = tbox
-                .filter(|(s, p, o)| *p == equivalentClass)
-                .map(|(s, p, o)| (s, o));
+            let eqc_assertions = eqc_assertions.enter(&inner);
 
-            let type_assertions_by_o = abox
-                .filter(|(s, p, o)| *p == r#type)
-                .map(|(s, p, o)| (o, s))
-                .arrange_by_key();
+            let type_assertions_by_o = type_assertions_by_o.enter(&inner);
 
-            let sas_assertions = tbox
-                .filter(|(s, p, o)| *p == sameAs)
-                .map(|(s, p, o)| (s, o));
+            let sas_assertions = sas_assertions.enter(&inner);
 
-            let abox_by_s = abox.map(|(s, p, o)| (s, (p, o))).arrange_by_key();
-            let abox_by_p = abox.map(|(s, p, o)| (p, (s, o))).arrange_by_key();
-            let abox_by_o = abox.map(|(s, p, o)| (o, (s, p))).arrange_by_key();
+            let abox_by_s = abox_by_s.enter(&inner);
+            let abox_by_p = abox_by_p.enter(&inner);
+            let abox_by_o = abox_by_o.enter(&inner);
 
-            let dom_assertions = tbox
-                .filter(|(s, p, o)| *p == domain)
-                .map(|(s, p, o)| (s, o));
+            let dom_assertions = dom_assertions.enter(&inner);
 
-            let rng_assertions = tbox.filter(|(s, p, o)| *p == range).map(|(s, p, o)| (s, o));
+            let rng_assertions = rng_assertions.enter(&inner);
 
-            let symp_assertions = tbox
-                .filter(|(s, p, o)| *o == SymmetricProperty)
-                .map(|(s, p, o)| (p, p));
+            let symp_assertions = symp_assertions.enter(&inner);
 
-            let trans_assertions = tbox
-                .filter(|(s, p, o)| *o == TransitiveProperty)
-                .map(|(s, p, o)| (p, p));
+            let trans_assertions = trans_assertions.enter(&inner);
 
-            let spo_assertions = tbox
-                .filter(|(s, p, o)| *p == subPropertyOf)
-                .map(|(s, p, o)| (s, o));
+            let spo_assertions = spo_assertions.enter(&inner);
 
-            let eqp_assertions = tbox
-                .filter(|(s, p, o)| *p == equivalentProperty)
-                .map(|(s, p, o)| (s, o));
+            let eqp_assertions = eqp_assertions.enter(&inner);
 
-            let inv_assertions = tbox
-                .filter(|(s, p, o)| *p == inverseOf)
-                .map(|(s, p, o)| (s, o));
+            let inv_assertions = inv_assertions.enter(&inner);
 
-            let abox_by_sp = abox.map(|(s, p, o)| ((s, p), o)).arrange_by_key();
+            let abox_by_sp = abox_by_sp.enter(&inner);
 
-            let svf_assertions = tbox
-                .filter(|(s, p, o)| *p == someValuesFrom)
-                .map(|(s, p, o)| (s, o));
+            let svf_assertions = svf_assertions.enter(&inner);
 
-            let avf_assertions = tbox
-                .filter(|(s, p, o)| *p == allValuesFrom)
-                .map(|(s, p, o)| (s, o));
+            let avf_assertions = avf_assertions.enter(&inner);
 
-            let op_assertions = tbox
-                .filter(|(s, p, o)| *p == onProperty)
-                .map(|(s, p, o)| (s, o))
-                .arrange_by_key();
+            let op_assertions = op_assertions.enter(&inner);
 
-            let hv_assertions = tbox
-                .filter(|(s, p, o)| *p == hasValue)
-                .map(|(s, p, o)| (s, o));
+            let hv_assertions = hv_assertions.enter(&inner);
 
-            let abox_by_so = abox.map(|(s, p, o)| ((s, o), p)).arrange_by_key();
-            let abox_by_po = abox.map(|(s, p, o)| ((p, o), s)).arrange_by_key();
+            let abox_by_so = abox_by_so.enter(&inner);
+            let abox_by_po = abox_by_po.enter(&inner);
 
             // cax-sco
             let cax_sco = sco_assertions
@@ -505,4 +581,5 @@ pub fn owl2rl_abox<'a>(
             abox_new.leave()
         })
         .concat(&abox)
+        .consolidate()
 }
