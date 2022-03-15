@@ -1,10 +1,10 @@
 use crate::model::types::{
-    BinaryMaterialization, Terminator, Triple, TripleInputSource, TripleOutputSink,
-    UnaryMaterialization,
+    FirstStageMaterialization, SecondStageMaterialization, Terminator, Triple, TripleInputSource,
+    TripleOutputSink,
 };
 use differential_dataflow::input::Input;
-use differential_dataflow::operators::arrange::ArrangeBySelf;
-use differential_dataflow::trace::{Trace, TraceReader};
+use differential_dataflow::operators::arrange::{ArrangeByKey, ArrangeBySelf};
+use differential_dataflow::trace::{Trace};
 use std::time::Duration;
 use timely::communication::allocator::Generic;
 use timely::worker::{AsWorker, Worker};
@@ -12,8 +12,8 @@ use timely::PartialOrder;
 
 pub fn reason(
     cfg: timely::Config,
-    tbox_materialization: UnaryMaterialization,
-    abox_materialization: BinaryMaterialization,
+    tbox_materialization: FirstStageMaterialization,
+    abox_materialization: SecondStageMaterialization,
     tbox_input_source: TripleInputSource,
     abox_input_source: TripleInputSource,
     tbox_output_sink: TripleOutputSink,
@@ -21,35 +21,43 @@ pub fn reason(
     terminator: Terminator,
 ) -> () {
     timely::execute(cfg, move |worker: &mut Worker<Generic>| {
-        let (mut tbox_input_session, mut tbox_trace, tbox_probe) = worker
-            .dataflow_named::<usize, _, _>("tbox_materialization", |mut scope| {
+        let (mut tbox_input_session, mut tbox_trace, tbox_probe, mut expanded_lists_trace) = worker
+            .dataflow_named::<usize, _, _>("tbox_materialization", |scope| {
                 let tbox_output_sink = tbox_output_sink.clone();
                 let (tbox_input_session, tbox_collection) = scope.new_collection::<Triple, isize>();
-                let materialization = tbox_materialization(&tbox_collection);
+                let (tbox_materialization, expanded_lists) = tbox_materialization(&tbox_collection);
                 (
                     tbox_input_session,
-                    materialization.arrange_by_self().trace,
-                    materialization
-                        .inspect_batch(move |t, xs| {
+                    tbox_materialization.arrange_by_self().trace,
+                    tbox_materialization
+                        .inspect_batch(move |_t, xs| {
                             for ((s, p, o), time, diff) in xs {
                                 tbox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
                             }
                         })
                         .probe(),
+                    expanded_lists.arrange_by_key().trace,
                 )
             });
         let (mut abox_input_session, abox_probe) =
             worker.dataflow_named::<usize, _, _>("abox_materialization", |scope| {
                 let abox_output_sink = abox_output_sink.clone();
                 let (abox_input_session, abox_collection) = scope.new_collection::<Triple, isize>();
-                let tbox = tbox_trace
+                let tbox_collection = tbox_trace
                     .import(scope)
                     .as_collection(|(s, p, o), _v| (*s, *p, *o));
-                let materialization = abox_materialization(&tbox, &abox_collection);
+                let expanded_lists_collection = expanded_lists_trace
+                    .import(scope)
+                    .as_collection(|head, tail| (*head, tail.clone()));
+                let materialization = abox_materialization(
+                    &tbox_collection,
+                    &expanded_lists_collection,
+                    &abox_collection,
+                );
                 (
                     abox_input_session,
                     materialization
-                        .inspect_batch(move |t, xs| {
+                        .inspect_batch(move |_t, xs| {
                             for ((s, p, o), time, diff) in xs {
                                 abox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
                             }
@@ -104,9 +112,8 @@ pub fn reason(
 #[cfg(test)]
 mod tests {
     use crate::materialization::common::{
-        dummy_binary_materialization, dummy_unary_materialization,
+        dummy_first_stage_materialization, dummy_second_stage_materialization,
     };
-    use crate::model::types::{RegularScope, TripleCollection};
     use crate::reason::reason;
     use timely::communication::Config;
 
@@ -127,8 +134,8 @@ mod tests {
                 communication: Config::Process(2),
                 worker: Default::default(),
             },
-            dummy_unary_materialization,
-            dummy_binary_materialization,
+            dummy_first_stage_materialization,
+            dummy_second_stage_materialization,
             tbox_input_source,
             abox_input_source,
             tbox_output_sink,

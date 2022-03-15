@@ -1,26 +1,36 @@
-use differential_dataflow::lattice::Lattice;
+use differential_dataflow::input::Input;
+
 use differential_dataflow::operators::arrange::ArrangeByKey;
 use differential_dataflow::operators::{iterate, JoinCore, Threshold};
 use timely::dataflow::Scope;
 use timely::order::Product;
 
-use crate::model::consts::constants::rdfs::{r#type, subClassOf, subPropertyOf};
-use crate::model::types::{KeyedTripleCollection, TripleCollection};
+use crate::model::consts::constants::rdfs::{subClassOf, subPropertyOf};
+use crate::model::types::{
+    KeyedTripleCollection, ListCollection, TripleCollection, TupleCollection,
+};
 
-pub fn dummy_unary_materialization<'a>(collection: &TripleCollection<'a>) -> TripleCollection<'a> {
-    collection.clone()
+pub fn dummy_first_stage_materialization<'a>(
+    collection: &TripleCollection<'a>,
+) -> (TripleCollection<'a>, ListCollection<'a>) {
+    let mut scope = collection.scope();
+    let list = scope.new_collection_from(vec![(0, vec![0])]);
+    (collection.clone(), list.1)
 }
 
-pub fn dummy_binary_materialization<'a>(
-    collection_one: &TripleCollection<'a>,
+pub fn dummy_second_stage_materialization<'a>(
+    _collection_one: &TripleCollection<'a>,
+    _list_collection_one: &ListCollection<'a>,
     collection_two: &TripleCollection<'a>,
 ) -> TripleCollection<'a> {
     collection_two.clone()
 }
 
-pub fn tbox_spo_sco_materialization<'a>(tbox: &TripleCollection<'a>) -> TripleCollection<'a> {
+pub fn tbox_spo_sco_materialization<'a>(
+    tbox: &TripleCollection<'a>,
+) -> (TripleCollection<'a>, ListCollection<'a>) {
     let mut outer = tbox.scope();
-    outer.region_named("Tbox transitive rules", |inn| {
+    let tbox = outer.region_named("Tbox transitive rules", |inn| {
         let tbox = tbox.enter(inn);
 
         let tbox_by_o = tbox.map(|(s, p, o)| (o, (p, s)));
@@ -72,7 +82,8 @@ pub fn tbox_spo_sco_materialization<'a>(tbox: &TripleCollection<'a>) -> TripleCo
             .concat(&spo)
             .map(|(s, (p, o))| (s, p, o))
             .leave()
-    })
+    });
+    (tbox, outer.new_collection_from(vec![(0, vec![0])]).1)
 }
 
 // This is indirectly tested on `rdfs.rs` and `rdfspp.rs`
@@ -96,38 +107,24 @@ pub fn abox_sco_type_materialization<'a>(
     })
 }
 
-// This is indirectly tested on `rdfs.rs` and `rdfspp.rs`
 pub fn abox_domain_and_range_type_materialization<'a>(
-    tbox_domain_assertions: &KeyedTripleCollection<'a>,
-    tbox_range_assertions: &KeyedTripleCollection<'a>,
-    abox_property_assertions: &KeyedTripleCollection<'a>,
-) -> (KeyedTripleCollection<'a>, KeyedTripleCollection<'a>) {
-    let mut outer = tbox_domain_assertions.scope();
-    outer.region_named("Domain and Range type rules", |inner| {
-        let property_assertions = abox_property_assertions.enter(inner);
+    domain_assertions: &TupleCollection<'a>,
+    range_assertions: &TupleCollection<'a>,
+    property_assertions_by_p: &KeyedTripleCollection<'a>,
+) -> (TupleCollection<'a>, TupleCollection<'a>) {
+    let property_assertions_by_p_arr = property_assertions_by_p.arrange_by_key();
 
-        let p_s_arr = property_assertions
-            .map(|(p, (s, _o))| (p, s))
-            .distinct()
-            .arrange_by_key_named("Arrange (p, s) for PRP-DOM");
+    let domain_type = domain_assertions
+        .join_core(&property_assertions_by_p_arr, |&_a, &x, &(y, _z)| {
+            Some((x, y))
+        });
 
-        let p_o_arr = property_assertions
-            .map(|(p, (_s, o))| (p, o))
-            .distinct()
-            .arrange_by_key_named("Arrange (p, o) for PRP-RNG");
+    let range_type = range_assertions
+        .join_core(&property_assertions_by_p_arr, |_a, &x, &(_y, z)| {
+            Some((x, z))
+        });
 
-        let domain_assertions = tbox_domain_assertions.enter(inner);
-
-        let domain_type =
-            domain_assertions.join_core(&p_s_arr, |_p, &(_, x), &y| Some((x, (y, r#type))));
-
-        let range_assertions = tbox_range_assertions.enter(inner);
-
-        let range_type =
-            range_assertions.join_core(&p_o_arr, |_p, &(_, x), &z| Some((x, (z, r#type))));
-
-        (domain_type.leave(), range_type.leave())
-    })
+    (domain_type, range_type)
 }
 
 #[cfg(test)]
@@ -135,7 +132,7 @@ mod tests {
     use timely::communication::Config;
 
     use crate::materialization::common::{
-        dummy_binary_materialization, tbox_spo_sco_materialization,
+        dummy_second_stage_materialization, tbox_spo_sco_materialization,
     };
     use crate::model::consts::constants::rdfs::{subClassOf, subPropertyOf};
     use crate::model::consts::constants::MAX_CONST;
@@ -145,7 +142,7 @@ mod tests {
     fn tbox_spo_sco_materialization_works() {
         let (tbox_output_sink, tbox_output_source) = flume::unbounded();
         let (tbox_input_sink, tbox_input_source) = flume::bounded(4);
-        let (abox_output_sink, abox_output_source) = flume::bounded(2);
+        let (abox_output_sink, abox_output_source) = flume::unbounded();
         let (abox_input_sink, abox_input_source) = flume::bounded(2);
         let (termination_sink, termination_source) = flume::bounded(1);
         let professor = MAX_CONST + 1;
@@ -173,7 +170,7 @@ mod tests {
                 worker: Default::default(),
             },
             tbox_spo_sco_materialization,
-            dummy_binary_materialization,
+            dummy_second_stage_materialization,
             tbox_input_source,
             abox_input_source,
             tbox_output_sink,

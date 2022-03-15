@@ -1,71 +1,62 @@
 use differential_dataflow::operators::arrange::ArrangeByKey;
-use differential_dataflow::operators::{Consolidate, JoinCore, Threshold, ThresholdTotal};
-use timely::dataflow::Scope;
+use differential_dataflow::operators::{Consolidate, JoinCore};
+
 
 use crate::materialization::common::{
-    abox_domain_and_range_type_materialization, abox_sco_type_materialization,
+    abox_domain_and_range_type_materialization,
 };
 use crate::model::consts::constants::rdfs::{domain, r#type, range, subClassOf, subPropertyOf};
-use crate::model::types::TripleCollection;
+use crate::model::types::{ListCollection, TripleCollection};
 
-pub fn rdfs<'a>(tbox: &TripleCollection<'a>, abox: &TripleCollection<'a>) -> TripleCollection<'a> {
-    let tbox = tbox.map(|(s, p, o)| (s, (p, o)));
+pub fn rdfs<'a>(
+    tbox: &TripleCollection<'a>,
+    _lists: &ListCollection<'a>,
+    abox: &TripleCollection<'a>,
+) -> TripleCollection<'a> {
+    let sco_assertions = tbox
+        .filter(|(_s, p, _o)| *p == subClassOf)
+        .map(|(s, _p, o)| (s, o));
+    let spo_assertions = tbox
+        .filter(|(_s, p, _o)| *p == subPropertyOf)
+        .map(|(s, _p, o)| (s, o));
+    let domain_assertions = tbox
+        .filter(|(_s, p, _o)| *p == domain)
+        .map(|(s, _p, o)| (s, o));
+    let range_assertions = tbox
+        .filter(|(_s, p, _o)| *p == range)
+        .map(|(s, _p, o)| (s, o));
 
-    let sco_assertions = tbox.filter(|(_s, (p, _o))| *p == subClassOf);
-    let spo_assertions = tbox.filter(|(_s, (p, _o))| *p == subPropertyOf);
-    let domain_assertions = tbox.filter(|(_s, (p, _o))| *p == domain);
-    let range_assertions = tbox.filter(|(_s, (p, _o))| *p == range);
+    let type_assertions = abox.filter(|(_s, p, _o)| *p == r#type);
+    let type_assertions_by_o = type_assertions.map(|(s, _p, o)| (o, s));
 
-    let type_assertions = abox
-        .map(|(s, p, o)| (o, (s, p)))
-        .filter(|(_o, (_s, p))| *p == r#type);
-    let not_type_assertions = abox
-        .map(|(s, p, o)| (p, (s, o)))
-        .filter(|(p, (_s, _o))| *p != r#type);
+    let property_assertions = abox.filter(|(_s, p, _o)| *p != r#type);
+    let property_assertions_by_p = property_assertions.map(|(s, p, o)| (p, (s, o)));
+    let property_assertions_by_p_arr = property_assertions_by_p.arrange_by_key();
 
-    let mut outer = tbox.scope();
-
-    let property_materialization = outer.region_named("Abox transitive property rules", |inn| {
-        let property_assertions_arr = not_type_assertions
-            .enter(inn)
-            .arrange_by_key_named("Arrange property assertions for Abox PRP-SPO1");
-
-        spo_assertions
-            .enter(inn)
-            .join_core(&property_assertions_arr, |_key, &(_spo, b), &(x, y)| {
-                Some((b, (x, y)))
-            })
-            .leave()
+    let rdfs7 = spo_assertions.join_core(&property_assertions_by_p_arr, |&_a, &b, &(x, y)| {
+        Some((b, (x, y)))
     });
 
-    let property_assertions = property_materialization.concat(&not_type_assertions);
+    let property_assertions_by_p = rdfs7.concat(&property_assertions_by_p);
+    let property_assertions = property_assertions_by_p.map(|(p, (s, o))| (s, p, o));
 
-    let (domain_type, range_type) = abox_domain_and_range_type_materialization(
+    let (rdfs2, rdfs3) = abox_domain_and_range_type_materialization(
         &domain_assertions,
         &range_assertions,
-        &property_assertions,
+        &property_assertions_by_p,
     );
 
-    let class_assertions = type_assertions.concatenate(vec![domain_type, range_type]);
+    let type_assertions_by_o = type_assertions_by_o.concatenate(vec![rdfs2, rdfs3]);
+    let type_assertions_by_o_arr = type_assertions_by_o.arrange_by_key();
 
-    let class_materialization = abox_sco_type_materialization(&sco_assertions, &class_assertions);
+    let type_assertions = sco_assertions
+        .join_core(&type_assertions_by_o_arr, |&_x, &y, &z| Some((y, z)))
+        .concat(&type_assertions_by_o)
+        .map(|(o, s)| (s, r#type, o));
 
-    let class_assertions = class_assertions.concat(&class_materialization);
-
-    outer.region_named("Concatenating all rules", |inner| {
-        let abox = abox.enter(inner);
-
-        let property_assertions = property_assertions
-            .enter(inner)
-            .map(|(p, (x, y))| (x, p, y));
-
-        let class_assertions = class_assertions.enter(inner).map(|(y, (x, p))| (x, p, y));
-
-        abox.concat(&property_assertions)
-            .concat(&class_assertions)
-            .consolidate()
-            .leave()
-    })
+    abox.concat(&property_assertions)
+        .concat(&type_assertions)
+        .consolidate()
 }
 
 #[cfg(test)]

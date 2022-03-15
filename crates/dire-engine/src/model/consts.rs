@@ -1,6 +1,6 @@
 #[allow(non_upper_case_globals)]
 pub mod constants {
-    pub const MAX_CONST: u32 = 44;
+    pub const MAX_CONST: u32 = 45;
 
     pub mod rdfs {
         //                 let _rdfsco: &str = "<http://www.w3.org/2000/01/rdf-schema#subClassOf>";
@@ -98,5 +98,8 @@ pub mod constants {
         pub const hasValue: u32 = 44;
         //                 let _owlnt: &str = "<http://www.w3.org/2002/07/owl#Nothing>"
         pub const Nothing: u32 = 45;
+        //
+        pub const oneOf: u32 = 46;
+        //                 let _owloo: &str = "<http://www.w3.org/2002/07/owl#oneOf>"
     }
 }

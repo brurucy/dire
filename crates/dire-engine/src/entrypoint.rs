@@ -1,7 +1,8 @@
 use std::thread;
 
 use crate::materialization::common::{
-    dummy_binary_materialization, dummy_unary_materialization, tbox_spo_sco_materialization,
+    dummy_first_stage_materialization, dummy_second_stage_materialization,
+    tbox_spo_sco_materialization,
 };
 use crate::materialization::owl2rl::{owl2rl_abox, owl2rl_tbox};
 use crate::materialization::rdfs::rdfs;
@@ -36,7 +37,7 @@ pub fn entrypoint(
 
     let join_handle = thread::spawn(move || {
         let tbox_materialization = match logic {
-            Engine::Dummy => dummy_unary_materialization,
+            Engine::Dummy => dummy_first_stage_materialization,
             Engine::OWL2RL => owl2rl_tbox,
             _ => tbox_spo_sco_materialization,
         };
@@ -44,7 +45,7 @@ pub fn entrypoint(
             Engine::RDFS => rdfs,
             Engine::RDFSpp => rdfspp,
             Engine::OWL2RL => owl2rl_abox,
-            Engine::Dummy => dummy_binary_materialization,
+            Engine::Dummy => dummy_second_stage_materialization,
         };
         reason(
             cfg,
@@ -69,14 +70,13 @@ pub fn entrypoint(
 }
 
 mod tests {
-    use std::time::Duration;
-
     use crate::entrypoint::{entrypoint, Engine};
     use crate::model::consts::constants::owl::{
         inverseOf, Class, ObjectProperty, TransitiveProperty,
     };
     use crate::model::consts::constants::rdfs::{domain, r#type, range, subClassOf, subPropertyOf};
     use crate::model::consts::constants::MAX_CONST;
+    use std::time::Duration;
 
     #[test]
     fn entrypoint_rdfs_works() {
