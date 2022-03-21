@@ -39,11 +39,19 @@ fn main() {
                 .required(true)
                 .index(5),
         )
+        .arg(
+            Arg::new("UPDATE_PATH")
+                .help("Take batch size as update")
+                .required(false)
+                .index(6),
+        )
         .get_matches();
 
     let t_path: String = matches.value_of("TBOX_PATH").unwrap().to_string();
     let a_path: String = matches.value_of("ABOX_PATH").unwrap().to_string();
     let expressivity: String = matches.value_of("EXPRESSIVITY").unwrap().to_string();
+    let update: bool = matches.is_present("UPDATE_PATH");
+    let update_file_path: String = matches.value_of("UPDATE_PATH").unwrap().to_string();
 
     let workers: usize = matches
         .value_of("WORKERS")
@@ -87,11 +95,19 @@ fn main() {
         })
     }
 
+    if update {
+        let abox_iter = load3enc(&update_file_path);
+        if let Ok(parsed_nt) = abox_iter {
+            parsed_nt.for_each(|triple| {
+                abox_input_sink.send((triple, -1)).unwrap();
+            })
+        }
+    }
+
     termination_source.send(()).unwrap();
 
     joinhandle.join().unwrap();
 
     println!("materialized tbox triples: {}", tbox_output_source.len());
     println!("materialized abox triples: {}", abox_output_source.len());
-
 }

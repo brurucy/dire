@@ -4,8 +4,9 @@ use crate::model::types::{
 };
 use differential_dataflow::input::Input;
 use differential_dataflow::operators::arrange::{ArrangeByKey, ArrangeBySelf};
-use differential_dataflow::trace::{Trace};
-use std::time::Duration;
+use differential_dataflow::operators::Threshold;
+use differential_dataflow::trace::Trace;
+use std::time::{Duration, Instant};
 use timely::communication::allocator::Generic;
 use timely::worker::{AsWorker, Worker};
 use timely::PartialOrder;
@@ -30,6 +31,7 @@ pub fn reason(
                     tbox_input_session,
                     tbox_materialization.arrange_by_self().trace,
                     tbox_materialization
+                        .distinct()
                         .inspect_batch(move |_t, xs| {
                             for ((s, p, o), time, diff) in xs {
                                 tbox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
@@ -57,6 +59,7 @@ pub fn reason(
                 (
                     abox_input_session,
                     materialization
+                        .distinct()
                         .inspect_batch(move |_t, xs| {
                             for ((s, p, o), time, diff) in xs {
                                 abox_output_sink.send(((*s, *p, *o), *time, *diff)).unwrap()
@@ -69,10 +72,11 @@ pub fn reason(
         let mut last_ts = 0;
         if worker.index() == 0 {
             loop {
+                let now = Instant::now();
                 if abox_input_source.is_full() | tbox_input_source.is_full() | last_run {
                     tbox_input_source
                         .drain()
-                        .for_each(|triple| tbox_input_session.insert(triple.0));
+                        .for_each(|triple| tbox_input_session.update(triple.0, triple.1));
 
                     tbox_input_session.advance_to(*tbox_input_session.epoch() + 1);
                     last_ts += 1;
@@ -80,17 +84,20 @@ pub fn reason(
 
                     abox_input_source
                         .drain()
-                        .for_each(|triple| abox_input_session.insert(triple.0));
+                        .for_each(|triple| abox_input_session.update(triple.0, triple.1));
 
                     abox_input_session.advance_to(*abox_input_session.epoch() + 1);
                     abox_input_session.flush();
+
+                    worker.step_or_park_while(Some(Duration::from_millis(50)), || {
+                        tbox_probe.less_than(tbox_input_session.time())
+                    });
+                    worker.step_or_park_while(Some(Duration::from_millis(50)), || {
+                        abox_probe.less_than(abox_input_session.time())
+                    });
+
+                    println!("latency: {} milliseconds", now.elapsed().as_millis())
                 }
-                worker.step_or_park_while(Some(Duration::from_millis(5)), || {
-                    tbox_probe.less_than(tbox_input_session.time())
-                });
-                worker.step_or_park_while(Some(Duration::from_millis(5)), || {
-                    abox_probe.less_than(abox_input_session.time())
-                });
 
                 if last_run {
                     abox_input_session.close();
