@@ -5,15 +5,15 @@ use dire_engine::entrypoint::{entrypoint, Engine};
 use dire_parser::load3enc;
 use std::thread;
 use std::time::Duration;
-use timely::communication::initialize;
 use timely::CommunicationConfig::{Cluster, Process};
 use timely::{Config, WorkerConfig};
-use toml::Value::String;
+use std::string::String;
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Cfg {
     index: usize,
-    hosts: Vec<String>
+    hosts: Vec<String>,
 }
 
 fn parse_hosts_file(filename: &str) -> Cfg{
@@ -104,7 +104,7 @@ fn main() {
                 process: hosts_file.index,
                 addresses: hosts_file.hosts,
                 report: true,
-                log_fn: Box::new(())
+                log_fn: Box::new( | _ | None),
             }
         };
     }
