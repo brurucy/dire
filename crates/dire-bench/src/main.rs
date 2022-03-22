@@ -1,9 +1,28 @@
 use std::fs::File;
+use std::io::Read;
 use clap::{Arg, Command};
 use dire_engine::entrypoint::{entrypoint, Engine};
 use dire_parser::load3enc;
 use std::thread;
 use std::time::Duration;
+use timely::communication::initialize;
+use timely::CommunicationConfig::{Cluster, Process};
+use timely::{Config, WorkerConfig};
+use toml::Value::String;
+
+#[derive(Deserialize)]
+struct Cfg {
+    index: usize,
+    hosts: Vec<String>
+}
+
+fn parse_hosts_file(filename: &str) -> Cfg{
+    let mut file = File::open(filename).unwrap();
+    let mut file_contents = String::new();
+    file.read_to_string(&mut file_contents).unwrap();
+    let config: Cfg = toml::from_str(&file_contents).unwrap();
+    return config
+}
 
 fn main() {
     let matches = Command::new("differential-reasoner")
@@ -40,8 +59,8 @@ fn main() {
                 .index(5),
         )
         .arg(
-            Arg::new("UPDATE_PATH")
-                .help("Take batch size as update")
+            Arg::new("DISTRIBUTION_DETAILS_PATH")
+                .help("The required file that denotes the index of this worker and to which cluster it belongs to")
                 .required(false)
                 .index(6),
         )
@@ -50,8 +69,8 @@ fn main() {
     let t_path: String = matches.value_of("TBOX_PATH").unwrap().to_string();
     let a_path: String = matches.value_of("ABOX_PATH").unwrap().to_string();
     let expressivity: String = matches.value_of("EXPRESSIVITY").unwrap().to_string();
-    let update: bool = matches.is_present("UPDATE_PATH");
-    let update_file_path: String = matches.value_of("UPDATE_PATH").unwrap().to_string();
+    let distributed: bool = matches.is_present("DISTRIBUTION_DETAILS_PATH");
+    let distribution_config_path: String = matches.value_of("DISTRIBUTION_DETAILS_PATH").unwrap().to_string();
 
     let workers: usize = matches
         .value_of("WORKERS")
@@ -71,7 +90,25 @@ fn main() {
         _ => Engine::Dummy,
     };
 
-    let process = timely::Config::process(workers);
+    let mut cfg: timely::Config = Config {
+        communication: Process (workers),
+        worker: WorkerConfig::default()
+    };
+
+    if distributed {
+        let hosts_file = parse_hosts_file(&distribution_config_path);
+        cfg = timely::Config {
+            worker: WorkerConfig::default(),
+            communication: Cluster {
+                threads: workers,
+                process: hosts_file.index,
+                addresses: hosts_file.hosts,
+                report: true,
+                log_fn: Box::new(())
+            }
+        };
+    }
+
     let (
         tbox_input_sink,
         abox_input_sink,
@@ -79,7 +116,7 @@ fn main() {
         abox_output_source,
         termination_source,
         joinhandle,
-    ) = entrypoint(process, batch_size, logic);
+    ) = entrypoint(cfg, batch_size, logic);
 
     let tbox_iter = load3enc(&t_path);
     if let Ok(parsed_nt) = tbox_iter {
@@ -93,15 +130,6 @@ fn main() {
         parsed_nt.for_each(|triple| {
             abox_input_sink.send((triple, 1)).unwrap();
         })
-    }
-
-    if update {
-        let abox_iter = load3enc(&update_file_path);
-        if let Ok(parsed_nt) = abox_iter {
-            parsed_nt.for_each(|triple| {
-                abox_input_sink.send((triple, -1)).unwrap();
-            })
-        }
     }
 
     termination_source.send(()).unwrap();
