@@ -58,19 +58,11 @@ fn main() {
                 .required(true)
                 .index(5),
         )
-        .arg(
-            Arg::new("DISTRIBUTION_DETAILS_PATH")
-                .help("The required file that denotes the index of this worker and to which cluster it belongs to")
-                .required(false)
-                .index(6),
-        )
         .get_matches();
 
     let t_path: String = matches.value_of("TBOX_PATH").unwrap().to_string();
     let a_path: String = matches.value_of("ABOX_PATH").unwrap().to_string();
     let expressivity: String = matches.value_of("EXPRESSIVITY").unwrap().to_string();
-    let distributed: bool = matches.is_present("DISTRIBUTION_DETAILS_PATH");
-    let distribution_config_path: String = matches.value_of("DISTRIBUTION_DETAILS_PATH").unwrap().to_string();
 
     let workers: usize = matches
         .value_of("WORKERS")
@@ -94,20 +86,6 @@ fn main() {
         communication: Process (workers),
         worker: WorkerConfig::default()
     };
-
-    if distributed {
-        let hosts_file = parse_hosts_file(&distribution_config_path);
-        cfg = timely::Config {
-            worker: WorkerConfig::default(),
-            communication: Cluster {
-                threads: workers,
-                process: hosts_file.index,
-                addresses: hosts_file.hosts,
-                report: true,
-                log_fn: Box::new( | _ | None),
-            }
-        };
-    }
 
     let (
         tbox_input_sink,
