@@ -192,8 +192,9 @@ fn main() {
     };
 
     let log_file = File::create(format!(
-        "{}_{}_{}_{}.csv",
+        "{}_{}_{}_{}_{}.csv",
         a_filename.to_str().unwrap(),
+        expressivity.as_str(),
         batch_size,
         workers,
         SystemTime::now()
