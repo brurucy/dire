@@ -7,7 +7,9 @@ use crate::materialization::common::{
 use crate::materialization::owl2rl::{owl2rl_abox, owl2rl_tbox};
 use crate::materialization::rdfs::rdfs;
 use crate::materialization::rdfspp::rdfspp;
-use crate::model::types::{TerminationSink, TripleInputSink, TripleOutputSource};
+use crate::model::types::{
+    DoneSink, DoneSource, LogSource, MasterSink, TripleInputSink, TripleOutputSource,
+};
 use crate::reason::reason;
 
 pub enum Engine {
@@ -26,14 +28,18 @@ pub fn entrypoint(
     TripleInputSink,
     TripleOutputSource,
     TripleOutputSource,
-    TerminationSink,
+    DoneSource,
+    MasterSink,
+    LogSource,
     std::thread::JoinHandle<()>,
 ) {
     let (tbox_output_sink, tbox_output_source) = flume::unbounded();
     let (tbox_input_sink, tbox_input_source) = flume::bounded(batch_size);
     let (abox_output_sink, abox_output_source) = flume::unbounded();
     let (abox_input_sink, abox_input_source) = flume::bounded(batch_size);
-    let (termination_sink, termination_source) = flume::bounded(1);
+    let (done_sink, done_source) = flume::bounded(0);
+    let (terminate_sink, terminate_source) = flume::bounded(0);
+    let (log_sink, log_source) = flume::unbounded();
 
     let join_handle = thread::spawn(move || {
         let tbox_materialization = match logic {
@@ -55,16 +61,19 @@ pub fn entrypoint(
             abox_input_source,
             tbox_output_sink,
             abox_output_sink,
-            termination_source,
+            done_sink,
+            terminate_source,
+            log_sink,
         );
     });
-
     (
         tbox_input_sink,
         abox_input_sink,
         tbox_output_source,
         abox_output_source,
-        termination_sink,
+        done_source,
+        terminate_sink,
+        log_source,
         join_handle,
     )
 }
