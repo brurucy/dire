@@ -83,10 +83,6 @@ pub fn reason(
         let mut iterate = true;
 
         println!("Parking issue?");
-        worker.step_or_park_while(Some(Duration::from_millis(5)), || {
-            !abox_input_source.is_full()
-        });
-        println!("Passed parking?");
 
         loop {
             let now = Instant::now();
