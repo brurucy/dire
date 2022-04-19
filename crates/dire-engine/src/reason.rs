@@ -137,10 +137,13 @@ pub fn reason(
                     current_data_regurgitated,
                     worker.index(),
                 );
+                println!("Logged");
                 logger.send(log.to_string());
                 files_loaded += 1;
                 done.send(());
+                println!("Sent");
                 if let Ok(command) = terminator.recv() {
+                    println!("Received");
                     match command.as_str() {
                         "STOP" => last_run = true,
                         _ => {
