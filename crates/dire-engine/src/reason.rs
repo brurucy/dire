@@ -82,8 +82,6 @@ pub fn reason(
         let mut files_loaded = 0;
         let mut iterate = true;
 
-        println!("Parking issue?");
-
         loop {
             let now = Instant::now();
             if !abox_input_source.is_empty() || !tbox_input_source.is_empty() {
