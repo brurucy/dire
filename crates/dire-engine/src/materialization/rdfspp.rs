@@ -1,6 +1,4 @@
-use crate::materialization::common::{
-    abox_domain_and_range_type_materialization,
-};
+use crate::materialization::common::abox_domain_and_range_type_materialization;
 use crate::model::consts::constants::owl::{inverseOf, TransitiveProperty};
 use crate::model::consts::constants::rdfs::{domain, r#type, range, subClassOf, subPropertyOf};
 use crate::model::types::{ListCollection, TripleCollection};
@@ -140,7 +138,9 @@ mod tests {
         let (tbox_input_sink, tbox_input_source) = flume::bounded(18);
         let (abox_output_sink, abox_output_source) = flume::unbounded();
         let (abox_input_sink, abox_input_source) = flume::bounded(6);
-        let (termination_sink, termination_source) = flume::bounded(1);
+        let (done_sink, done_source) = flume::bounded(0);
+        let (terminate_sink, terminate_source) = flume::bounded(0);
+        let (log_sink, log_source) = flume::unbounded();
         // Filling the tbox
         let employee = MAX_CONST + 1;
         let faculty = MAX_CONST + 2;
@@ -230,7 +230,7 @@ mod tests {
             .send(((full_professor_9, works_for, full_professor_10), 1))
             .unwrap();
 
-        termination_sink.send(()).unwrap();
+        terminate_sink.send("STOP".to_string()).unwrap();
         reason(
             timely::Config {
                 communication: Config::Process(2),
@@ -242,7 +242,9 @@ mod tests {
             abox_input_source,
             tbox_output_sink,
             abox_output_sink,
-            termination_source,
+            done_sink,
+            terminate_source,
+            log_sink,
         );
         let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
         let mut actual_abox_diffs: Vec<(u32, u32, u32)> = vec![];
