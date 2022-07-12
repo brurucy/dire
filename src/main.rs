@@ -8,6 +8,7 @@ use std::io::Write;
 use std::io::{BufWriter, Read};
 use std::mem::transmute;
 use std::path::Path;
+use std::process::id;
 use std::string::String;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -30,7 +31,7 @@ fn parse_hosts_file(filename: &str) -> Cfg {
 
 fn main() {
     let matches = Command::new("differential-reasoner")
-        .version("0.3.0")
+        .version("1.3.1")
         .about("Reasons in a differential manner 😎")
         .arg(
             Arg::new("TBOX_PATH")
@@ -90,14 +91,14 @@ fn main() {
         _ => Engine::Dummy,
     };
     let distributed: bool = matches.is_present("HOSTFILE");
-    let mut cfg: timely::Config = Config {
+    let mut cfg: Config = Config {
         communication: Process(workers),
         worker: WorkerConfig::default(),
     };
     if distributed {
         let hostfile = matches.value_of("HOSTFILE").unwrap().to_string();
         let parsed_hostfile = parse_hosts_file(&hostfile);
-        cfg = timely::Config {
+        cfg = Config {
             worker: WorkerConfig::default(),
             communication: Cluster {
                 threads: workers,
@@ -112,7 +113,7 @@ fn main() {
     let abox_iter = load3enc(&a_path);
     let abox_vec: Vec<Triple> = abox_iter.unwrap().collect();
     let cutoff: usize = (abox_vec.len() as f64 * batch_size) as usize;
-    println!("Cutoff: {}", cutoff);
+
     let mut batch_size: usize = 0;
     if cutoff == 0 {
         batch_size = abox_vec.len();
@@ -138,7 +139,7 @@ fn main() {
         })
     }
 
-    if cutoff != 0 {
+    if cutoff != 0 && cutoff != abox_vec.len() {
         let addition_vec: &[Triple];
         let deletion_vec: &[Triple];
         addition_vec = &abox_vec[cutoff..];
