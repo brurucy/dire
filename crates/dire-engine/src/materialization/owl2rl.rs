@@ -20,9 +20,13 @@ use crate::model::types::{ListCollection, Triple, TripleCollection};
 
 pub fn expand_lists<'a>(tbox: &TripleCollection<'a>) -> ListCollection<'a> {
     // "First" indicates the content of the rule
-    let first_assertions = tbox.filter(|(_s, p, _o)| *p == first).map(|(s, _p, o)| (s, o));
+    let first_assertions = tbox
+        .filter(|(_s, p, _o)| *p == first)
+        .map(|(s, _p, o)| (s, o));
     // "Rest" is either another list, or nil.
-    let rest_assertions = tbox.filter(|(_s, p, _o)| *p == rest).map(|(s, _p, o)| (s, o));
+    let rest_assertions = tbox
+        .filter(|(_s, p, _o)| *p == rest)
+        .map(|(s, _p, o)| (s, o));
     let rest_assertions_arr = rest_assertions.arrange_by_key();
     let first_rest_assertions = first_assertions
         .join_core(&rest_assertions_arr, |&head, &content, &tail| {
@@ -81,143 +85,6 @@ pub fn expand_lists<'a>(tbox: &TripleCollection<'a>) -> ListCollection<'a> {
             let contents: Vec<u32> = list.iter().map(|(_tail, contents)| *contents).collect();
             (head, contents)
         })
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::materialization::common::dummy_second_stage_materialization;
-    use crate::materialization::owl2rl::expand_lists;
-    use crate::model::consts::constants::owl::{intersectionOf, unionOf};
-    use crate::model::consts::constants::rdfs::{first, nil, rest, subClassOf};
-    use crate::model::consts::constants::MAX_CONST;
-    use crate::model::types::{Triple, TripleCollection};
-    use crate::reason::reason;
-    use differential_dataflow::operators::arrange::ArrangeByKey;
-    use differential_dataflow::operators::JoinCore;
-    use timely::communication::Config;
-
-    #[test]
-    fn list_expansion_works() {
-        let (tbox_output_sink, tbox_output_source) = flume::unbounded();
-        let (tbox_input_sink, tbox_input_source) = flume::bounded(14);
-        let (abox_output_sink, abox_output_source) = flume::unbounded();
-        let (abox_input_sink, abox_input_source) = flume::bounded(1);
-        let (termination_sink, termination_source) = flume::bounded(1);
-        let some_class_1 = MAX_CONST + 1;
-        let some_class_2 = MAX_CONST + 2;
-        let some_class_3 = MAX_CONST + 3;
-        let some_class_4 = MAX_CONST + 4;
-        let some_class_5 = MAX_CONST + 5;
-        let some_class_6 = MAX_CONST + 6;
-        let list_1 = MAX_CONST + 7;
-        let list_2 = MAX_CONST + 8;
-        let list_3 = MAX_CONST + 9;
-        let list_4 = MAX_CONST + 10;
-        let list_5 = MAX_CONST + 11;
-        let list_6 = MAX_CONST + 12;
-        let iof_test = MAX_CONST + 13; // 58
-        let uof_test = MAX_CONST + 14; // 59
-                                       // Chain 1
-        tbox_input_sink
-            .send(((list_1, first, some_class_1), 1))
-            .unwrap();
-        tbox_input_sink.send(((list_1, rest, list_2), 1)).unwrap();
-        tbox_input_sink
-            .send(((list_2, first, some_class_2), 1))
-            .unwrap();
-        tbox_input_sink.send(((list_2, rest, list_3), 1)).unwrap();
-        tbox_input_sink
-            .send(((list_3, first, some_class_3), 1))
-            .unwrap();
-        tbox_input_sink.send(((list_3, rest, nil), 1)).unwrap();
-        // Chain 2
-        tbox_input_sink
-            .send(((list_4, first, some_class_4), 1))
-            .unwrap();
-        tbox_input_sink.send(((list_4, rest, list_5), 1)).unwrap();
-        tbox_input_sink
-            .send(((list_5, first, some_class_5), 1))
-            .unwrap();
-        tbox_input_sink.send(((list_5, rest, list_6), 1)).unwrap();
-        tbox_input_sink
-            .send(((list_6, first, some_class_6), 1))
-            .unwrap();
-        tbox_input_sink.send(((list_6, rest, nil), 1)).unwrap();
-        //
-        tbox_input_sink
-            .send(((iof_test, intersectionOf, list_1), 1))
-            .unwrap();
-        tbox_input_sink
-            .send(((uof_test, unionOf, list_4), 1))
-            .unwrap();
-
-        termination_sink.send(());
-
-        reason(
-            timely::Config {
-                communication: Config::Process(1),
-                worker: Default::default(),
-            },
-            |tbox: &TripleCollection| {
-                let lists = expand_lists(&tbox);
-
-                let iof_assertions = tbox
-                    .filter(|(s, p, o)| *p == intersectionOf)
-                    .map(|(s, p, o)| (s, o));
-                let iof_assertions_by_o = iof_assertions.map(|(s, o)| (o, s));
-
-                let uof_assertions = tbox
-                    .filter(|(s, p, o)| *p == unionOf)
-                    .map(|(s, p, o)| (s, o));
-                let uof_assertions_by_o = uof_assertions.map(|(s, o)| (o, s));
-
-                let expanded_lists_arr = lists.arrange_by_key();
-
-                // scm-int
-                let scm_int = iof_assertions_by_o
-                    .join_core(&expanded_lists_arr, |&x, &c, list| Some((c, list.clone())))
-                    .flat_map(|(c, list)| {
-                        list.iter()
-                            .map(|c_x| (c, subClassOf, *c_x))
-                            .collect::<Vec<Triple>>()
-                    });
-                // scm-uni
-                let scm_uni = uof_assertions_by_o
-                    .join_core(&expanded_lists_arr, |&x, &c, list| Some((c, list.clone())))
-                    .flat_map(|(c, list)| {
-                        list.iter()
-                            .map(|c_x| (*c_x, subClassOf, c))
-                            .collect::<Vec<Triple>>()
-                    });
-
-                (scm_int.concat(&scm_uni), lists.clone())
-            },
-            dummy_second_stage_materialization,
-            tbox_input_source,
-            abox_input_source,
-            tbox_output_sink,
-            abox_output_sink,
-            termination_source,
-        );
-
-        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
-        let mut actual_abox_diffs = actual_tbox_diffs.clone();
-
-        while let Ok(diff) = tbox_output_source.try_recv() {
-            actual_tbox_diffs.push(diff.0)
-        }
-
-        let expected_tbox_diffs = vec![
-            (iof_test, subClassOf, some_class_1),
-            (iof_test, subClassOf, some_class_2),
-            (iof_test, subClassOf, some_class_3),
-            (some_class_4, subClassOf, uof_test),
-            (some_class_5, subClassOf, uof_test),
-            (some_class_6, subClassOf, uof_test),
-        ];
-
-        assert_eq!(expected_tbox_diffs, actual_tbox_diffs);
-    }
 }
 
 pub fn owl2rl_tbox<'a>(tbox: &TripleCollection<'a>) -> (TripleCollection<'a>, ListCollection<'a>) {
@@ -558,7 +425,9 @@ pub fn owl2rl_abox<'a>(
         .filter(|(_s, p, _o)| *p == domain)
         .map(|(s, _p, o)| (s, o));
 
-    let rng_assertions = tbox.filter(|(_s, p, _o)| *p == range).map(|(s, _p, o)| (s, o));
+    let rng_assertions = tbox
+        .filter(|(_s, p, _o)| *p == range)
+        .map(|(s, _p, o)| (s, o));
 
     let symp_assertions = tbox
         .filter(|(_s, _p, o)| *o == SymmetricProperty)
@@ -597,7 +466,9 @@ pub fn owl2rl_abox<'a>(
         .filter(|(_s, p, _o)| *p == hasValue)
         .map(|(s, _p, o)| (s, o));
 
-    let oof_assertions = tbox.filter(|(_s, p, _o)| *p == oneOf).map(|(s, _p, o)| (s, o));
+    let oof_assertions = tbox
+        .filter(|(_s, p, _o)| *p == oneOf)
+        .map(|(s, _p, o)| (s, o));
     let oof_assertions_by_o = oof_assertions.map(|(s, o)| (o, s)).arrange_by_key();
 
     let iof_assertions = tbox
@@ -703,16 +574,16 @@ pub fn owl2rl_abox<'a>(
             let cax = cax_sco.concatenate(vec![cax_eqc1, cax_eqc2]);
 
             // eq-rep-s
-            let eq_rep_s =
-                sas_assertions.join_core(&abox_by_s, |&_s, &s_prime, &(p, o)| Some((s_prime, p, o)));
+            let eq_rep_s = sas_assertions
+                .join_core(&abox_by_s, |&_s, &s_prime, &(p, o)| Some((s_prime, p, o)));
 
             // eq-rep-p
-            let eq_rep_p =
-                sas_assertions.join_core(&abox_by_p, |&_p, &p_prime, &(s, o)| Some((s, p_prime, o)));
+            let eq_rep_p = sas_assertions
+                .join_core(&abox_by_p, |&_p, &p_prime, &(s, o)| Some((s, p_prime, o)));
 
             // eq-rep-o
-            let eq_rep_o =
-                sas_assertions.join_core(&abox_by_o, |&_o, &o_prime, &(s, p)| Some((s, p, o_prime)));
+            let eq_rep_o = sas_assertions
+                .join_core(&abox_by_o, |&_o, &o_prime, &(s, p)| Some((s, p, o_prime)));
 
             // eq-sym
 
@@ -818,9 +689,10 @@ pub fn owl2rl_abox<'a>(
                     &lists_by_last_i_x.enter(&inner),
                     |&(_i, x), &(u_i, u_k), &_| Some((x, (u_i, u_k))),
                 )
-                .join_core(&pca_assertions_by_o.enter(&inner), |&_x, &(u_i, u_k), &p| {
-                    Some((u_i, p, u_k))
-                });
+                .join_core(
+                    &pca_assertions_by_o.enter(&inner),
+                    |&_x, &(u_i, u_k), &p| Some((u_i, p, u_k)),
+                );
 
             // prp-eqp1
 
@@ -930,7 +802,9 @@ pub fn owl2rl_abox<'a>(
                 hv_assertions.join_core(&op_assertions, |&x, &y, &p| Some((x, (p, y))));
 
             let cls_hv1 = cls_hv1_step_one
-                .join_core(&type_assertions_by_o_arr, |&_x, &(p, y), &u| Some((u, p, y)));
+                .join_core(&type_assertions_by_o_arr, |&_x, &(p, y), &u| {
+                    Some((u, p, y))
+                });
 
             // cls-hv2
             let cls_hv2_step_one =

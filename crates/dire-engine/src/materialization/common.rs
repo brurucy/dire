@@ -86,7 +86,6 @@ pub fn tbox_spo_sco_materialization<'a>(
     (tbox, outer.new_collection_from(vec![(0, vec![0])]).1)
 }
 
-// This is indirectly tested on `rdfs.rs` and `rdfspp.rs`
 pub fn abox_sco_type_materialization<'a>(
     tbox_sco_assertions: &KeyedTripleCollection<'a>,
     abox_class_assertions: &KeyedTripleCollection<'a>,
@@ -125,79 +124,4 @@ pub fn abox_domain_and_range_type_materialization<'a>(
         });
 
     (domain_type, range_type)
-}
-
-#[cfg(test)]
-mod tests {
-    use timely::communication::Config;
-
-    use crate::materialization::common::{
-        dummy_second_stage_materialization, tbox_spo_sco_materialization,
-    };
-    use crate::model::consts::constants::rdfs::{subClassOf, subPropertyOf};
-    use crate::model::consts::constants::MAX_CONST;
-    use crate::reason::reason;
-
-    #[test]
-    fn tbox_spo_sco_materialization_works() {
-        let (tbox_output_sink, tbox_output_source) = flume::unbounded();
-        let (tbox_input_sink, tbox_input_source) = flume::bounded(4);
-        let (abox_output_sink, abox_output_source) = flume::unbounded();
-        let (abox_input_sink, abox_input_source) = flume::bounded(2);
-        let (termination_sink, termination_source) = flume::bounded(1);
-        let professor = MAX_CONST + 1;
-        let employee = MAX_CONST + 2;
-        let tax_payer = MAX_CONST + 3;
-        tbox_input_sink
-            .send(((professor, subClassOf, employee), 1))
-            .unwrap();
-        tbox_input_sink
-            .send(((employee, subClassOf, tax_payer), 1))
-            .unwrap();
-        let head_of = MAX_CONST + 4;
-        let works_for = MAX_CONST + 5;
-        let member_of = MAX_CONST + 6;
-        tbox_input_sink
-            .send(((head_of, subPropertyOf, works_for), 1))
-            .unwrap();
-        tbox_input_sink
-            .send(((works_for, subPropertyOf, member_of), 1))
-            .unwrap();
-        termination_sink.send(()).unwrap();
-        reason(
-            timely::Config {
-                communication: Config::Process(2),
-                worker: Default::default(),
-            },
-            tbox_spo_sco_materialization,
-            dummy_second_stage_materialization,
-            tbox_input_source,
-            abox_input_source,
-            tbox_output_sink,
-            abox_output_sink,
-            termination_source,
-        );
-        let mut actual_tbox_diffs: Vec<(u32, u32, u32)> = vec![];
-
-        while let Ok(diff) = tbox_output_source.try_recv() {
-            actual_tbox_diffs.push(diff.0)
-        }
-
-        actual_tbox_diffs.sort_unstable();
-        actual_tbox_diffs.dedup();
-
-        let mut expected_tbox_diffs = vec![
-            (professor, subClassOf, employee),
-            (employee, subClassOf, tax_payer),
-            (professor, subClassOf, tax_payer),
-            (head_of, subPropertyOf, works_for),
-            (works_for, subPropertyOf, member_of),
-            (head_of, subPropertyOf, member_of),
-        ];
-
-        expected_tbox_diffs.sort_unstable();
-        expected_tbox_diffs.dedup();
-
-        assert_eq!(expected_tbox_diffs, actual_tbox_diffs)
-    }
 }

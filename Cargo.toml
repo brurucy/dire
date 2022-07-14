@@ -1,18 +1,14 @@
 [package]
-name = "dire"
+name = "dire-bench"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dire-engine = { path = "crates/dire-engine"}
-dire-parser = { path = "crates/dire-parser"}
+clap = "3.1.1"
+dire-engine = { path = "../dire/crates/dire-engine" }
+dire-parser = { path = "../dire/crates/dire-parser" }
 timely = "0.12.0"
-tui = "0.17.0"
-crossterm = "0.23.0"
-flume = "0.10.11"
-unicode-width = "0.1.9"
-
-[profile.dev]
-split-debuginfo = "unpacked"
+toml = "0.5.8"
+serde = { version="1.0.136", features=[ "derive"]}
